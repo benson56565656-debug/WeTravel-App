@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// WeTravel Firestore 安全規則
+// 部署方式：Firebase Console → Firestore Database → 規則 → 貼上本檔內容 → 發布
+//
+// 協作模型：行程以「知道連結（tripId）即可協作」的方式共享，
+// 因此已登入（含匿名登入）者可讀寫 trips；其餘路徑一律拒絕。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 行程文件：需登入（App 使用匿名登入）
+    match /trips/{tripId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 其他所有路徑：一律拒絕
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
