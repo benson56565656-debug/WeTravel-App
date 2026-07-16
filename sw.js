@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wetravel-v32';
+const CACHE_NAME = 'wetravel-v36';
 const ASSETS = [
   './index.html',
   './manifest.json',
@@ -17,7 +17,8 @@ const NO_CACHE_PATTERNS = [
   'api.open-meteo.com',
   'api.exchangerate-api.com',
   'firebase',
-  'app.js'
+  'app.js',
+  'checklist-data.js'
 ];
 
 // 需要 Network First 的檔案（確保每次開啟都拿最新版）

@@ -7,6 +7,7 @@ import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { initializeFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { CHECKLIST_CATEGORIES, LUGGAGE_META, CHECKLIST_TEMPLATE } from './checklist-data.js';
 
 createApp({
     setup() {
@@ -52,6 +53,8 @@ createApp({
         const days = ref([]);
         const savedLocations = ref([]);
         const expenses = ref([]);
+        const checklist = ref([]);
+        const collapsedCats = reactive({});
         const participants = ref([]);
         const participantsStr = ref('');
         const exchangeRate = ref(0.215);
@@ -239,6 +242,93 @@ createApp({
             if (idx === -1) return;
             const removed = savedLocations.value.splice(idx, 1)[0];
             showToast('已刪除地點', { icon: 'ph-bold ph-trash', undo: () => { savedLocations.value.splice(Math.min(idx, savedLocations.value.length), 0, removed); } });
+        };
+
+        // ---- 旅遊清單（項目共享、每人各勾各的；成員空時退化單一共用框 __shared__）----
+        const seedChecklist = () => CHECKLIST_TEMPLATE.map(t => ({ ...t, id: generateId(), checkedBy: {} }));
+        const seedDefaultChecklist = () => {
+            checklist.value = seedChecklist();
+            showToast(`已帶入預設清單（${CHECKLIST_TEMPLATE.length} 項）`, { icon: 'ph-bold ph-suitcase-rolling' });
+        };
+        const checklistMembers = computed(() => participants.value.length ? participants.value : ['__shared__']);
+        const memberLabel = (m) => m === '__shared__' ? '' : m;
+        // 目前操作角色：裝置本地偏好（不落 Firestore）；成員名單變動時 fallback 回第一位
+        const activeChecklistMember = ref(localStorage.getItem('wetravel_active_checklist_member') || '');
+        watch(checklistMembers, (ms) => {
+            if (!ms.includes(activeChecklistMember.value)) activeChecklistMember.value = ms[0];
+        }, { immediate: true });
+        watch(activeChecklistMember, (v) => { if (v) localStorage.setItem('wetravel_active_checklist_member', v); });
+        const toggleCheck = (item, member) => {
+            if (!item.checkedBy) item.checkedBy = {};
+            item.checkedBy[member] = !item.checkedBy[member];
+        };
+        const checklistProgress = computed(() => checklistMembers.value.map(m => ({
+            member: m,
+            done: checklist.value.filter(i => i.checkedBy && i.checkedBy[m]).length,
+            total: checklist.value.length
+        })));
+        // 分類進度跟著目前選中角色算（多人並排時代曾是「全員勾完才算」，已廢）
+        const checklistByCategory = computed(() => CHECKLIST_CATEGORIES
+            .map(cat => {
+                const items = checklist.value.filter(i => i.category === cat.slug);
+                return { ...cat, items, done: items.filter(i => i.checkedBy && i.checkedBy[activeChecklistMember.value]).length };
+            })
+            .filter(cat => cat.items.length));
+        const toggleCat = (slug) => { collapsedCats[slug] = !collapsedCats[slug]; };
+
+        // Chrome 偶發 bug：換頁淡入的 CSSTransition 凍結在 currentTime 0（fill backwards 持續蓋 opacity:0 → 整頁空白），
+        // 且 Vue 已清完 transition class、殘留動畫不會自己消失。換頁後逾時檢查，卡住就取消殘留動畫自癒。
+        watch(viewMode, () => {
+            setTimeout(() => {
+                document.querySelectorAll('.view-pane').forEach(el => {
+                    if (getComputedStyle(el).opacity !== '1' && !/fade-(enter|leave)/.test(el.className)) {
+                        el.getAnimations().forEach(a => a.cancel());
+                    }
+                });
+            }, 400);
+        });
+        const resetChecklist = async () => {
+            const ok = await appConfirm('所有成員的勾選都會清空，項目保留。', { title: '重設勾選', danger: true, confirmText: '全部重設' });
+            if (!ok) return;
+            checklist.value.forEach(i => { i.checkedBy = {}; });
+            showToast('已重設所有勾選');
+        };
+
+        // 清單項目彈窗（draft 制，同行程/口袋/支出）
+        const isCheckNameInvalid = ref(false);
+        const checkModal = reactive({ show: false, mode: 'add', targetId: null, draft: null });
+        const openCheckModal = (item = null) => {
+            isCheckNameInvalid.value = false;
+            if (item) {
+                checkModal.mode = 'edit'; checkModal.targetId = item.id;
+                checkModal.draft = JSON.parse(JSON.stringify(item));
+            } else {
+                checkModal.mode = 'add'; checkModal.targetId = null;
+                checkModal.draft = { id: generateId(), name: '', category: 'misc', luggage: 'any', note: '', checkedBy: {} };
+            }
+            checkModal.show = true;
+            if (!item) nextTick(() => { document.querySelector('.js-check-name')?.focus(); });
+        };
+        const saveCheckModal = () => {
+            if (!checkModal.draft.name.trim()) {
+                isCheckNameInvalid.value = true;
+                nextTick(() => { document.querySelector('.js-check-name')?.focus(); });
+                return;
+            }
+            if (checkModal.mode === 'edit') {
+                const target = checklist.value.find(i => i.id === checkModal.targetId);
+                if (target) Object.assign(target, checkModal.draft);
+            } else {
+                checklist.value.push({ ...checkModal.draft });
+            }
+            checkModal.show = false;
+        };
+        const deleteCheckFromModal = () => {
+            checkModal.show = false;
+            const idx = checklist.value.findIndex(i => i.id === checkModal.targetId);
+            if (idx === -1) return;
+            const removed = checklist.value.splice(idx, 1)[0];
+            showToast('已刪除項目', { icon: 'ph-bold ph-trash', undo: () => { checklist.value.splice(Math.min(idx, checklist.value.length), 0, removed); } });
         };
 
         // 記帳：快速新增保留內聯表單；既有支出點列開彈窗編輯
@@ -435,10 +525,10 @@ createApp({
             days.value = newDays;
             expenses.value = [];
             savedLocations.value = [];
+            checklist.value = seedChecklist();
             exchangeRate.value = setup.value.rate;
-            participantsStr.value = '';
-            participants.value = [];
-            newExpense.value.payer = '';
+            // 成員已在 setup modal 收好（createNewTrip 開窗時已重置過），此處不可清空
+            if (!participants.value.includes(newExpense.value.payer)) newExpense.value.payer = participants.value[0] || '';
 
             tripList.value.unshift(newTripMeta);
             saveTripList();
@@ -477,6 +567,7 @@ createApp({
                     switchTrip(tripList.value[0].id);
                 } else {
                     days.value = [];
+                    checklist.value = [];
                     currentTripId.value = null;
                     showSetupModal.value = true;
                 }
@@ -543,6 +634,15 @@ createApp({
                     expenses.value = data.expenses || [];
                     expenses.value.forEach(e => { if (e && !e.id) e.id = generateId(); });
                     savedLocations.value = (data.locations || []).filter(l => l);
+
+                    // 舊旅程無 checklist → 空陣列（分頁顯示帶入模板的空狀態）；欄位缺漏防禦性補齊
+                    checklist.value = (data.checklist || []).filter(i => i);
+                    checklist.value.forEach(i => {
+                        if (!i.id) i.id = generateId();
+                        if (!i.checkedBy) i.checkedBy = {};
+                        if (!CHECKLIST_CATEGORIES.some(c => c.slug === i.category)) i.category = 'misc';
+                        if (!LUGGAGE_META[i.luggage]) i.luggage = 'any';
+                    });
 
                     // 初次載入自動跳到「今天」（若今天落在行程日期區間內），並把當天 chip 捲入視野
                     if (isFirstSnapshot) {
@@ -633,6 +733,7 @@ createApp({
                         days: JSON.parse(JSON.stringify(days.value)),
                         expenses: expenses.value,
                         locations: savedLocations.value,
+                        checklist: JSON.parse(JSON.stringify(checklist.value)),
                         rate: exchangeRate.value,
                         users: participantsStr.value,
                         setup: setup.value,
@@ -652,7 +753,7 @@ createApp({
             }, 1000);
         };
 
-        watch([days, expenses, savedLocations, exchangeRate, participantsStr, setup], () => {
+        watch([days, expenses, savedLocations, checklist, exchangeRate, participantsStr, setup], () => {
             if (!ignoreRemoteUpdate && !(showSetupModal.value && !isEditing.value)) debouncedSave();
         }, { deep: true });
 
@@ -748,7 +849,12 @@ createApp({
             dialog, dialogAnswer, toast, undoToast,
             itemModal, openItemModal, saveItemModal, deleteItemFromModal,
             locModal, openLocModal, saveLocModal, deleteLocFromModal,
-            expModal, openExpModal, saveExpModal, deleteExpFromModal
+            expModal, openExpModal, saveExpModal, deleteExpFromModal,
+            checklist, collapsedCats, toggleCat, checklistMembers, memberLabel, toggleCheck,
+            activeChecklistMember,
+            checklistProgress, checklistByCategory, seedDefaultChecklist, resetChecklist,
+            checkModal, openCheckModal, saveCheckModal, deleteCheckFromModal, isCheckNameInvalid,
+            CHECKLIST_CATEGORIES, LUGGAGE_META
         };
     }
 }).mount('#app')
