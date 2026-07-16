@@ -22,7 +22,6 @@ createApp({
         const currentTripId = ref(null);
         const showSetupModal = ref(false);
         const isEditing = ref(false);
-        const isLocationsEditing = ref(false);
         const isDataLoading = ref(false);
         const isLoggedIn = ref(false);
         const dbError = ref(false);
@@ -48,15 +47,15 @@ createApp({
         let unsubscribeTripData = null;
         let ignoreRemoteUpdate = false;
 
-        const editingState = reactive({ dayTitle: false, flight: false, items: {} });
+        const editingState = reactive({ dayTitle: false, flight: false });
 
         const days = ref([]);
         const savedLocations = ref([]);
         const expenses = ref([]);
-        const participants = ref(['班', '熊']);
-        const participantsStr = ref('班, 熊');
+        const participants = ref([]);
+        const participantsStr = ref('');
         const exchangeRate = ref(0.215);
-        const newExpense = ref({ item: '', amount: '', payer: '班' });
+        const newExpense = ref({ item: '', amount: '', payer: '' });
 
         const isRateLoading = ref(false);
         const weather = ref({ temp: null, icon: 'ph-sun', code: 0, location: '', daily: [] });
@@ -69,6 +68,21 @@ createApp({
             const map = {}; participants.value.forEach(p => map[p] = 0);
             expenses.value.forEach(e => { if (map[e.payer] === undefined) map[e.payer] = 0; map[e.payer] += e.amount; }); return map;
         });
+        // 成員新增/刪除（直接同步 participantsStr 供存檔；participants 為顯示來源）
+        const newParticipant = ref('');
+        const addParticipant = () => {
+            const name = newParticipant.value.trim();
+            if (!name || participants.value.includes(name)) { newParticipant.value = ''; return; }
+            participants.value.push(name);
+            participantsStr.value = participants.value.join(', ');
+            if (!newExpense.value.payer) newExpense.value.payer = name;
+            newParticipant.value = '';
+        };
+        const removeParticipant = (name) => {
+            participants.value = participants.value.filter(p => p !== name);
+            participantsStr.value = participants.value.join(', ');
+            if (newExpense.value.payer === name) newExpense.value.payer = participants.value[0] || '';
+        };
         const currencyLabel = computed(() => setup.value.currency || '外幣');
         const currencySymbol = computed(() => { const map = { 'JPY': '¥', 'CNY': '¥', 'USD': '$', 'EUR': '€', 'KRW': '₩', 'GBP': '£', 'TWD': 'NT$', 'HKD': 'HK$', 'THB': '฿', 'VND': '₫' }; return map[setup.value.currency] || '$'; });
         const mapProviderLabel = computed(() => { const map = { 'google': 'Google Maps', 'naver': 'Naver Map', 'amap': '高德地圖' }; return map[setup.value.mapProvider] || '地圖'; });
@@ -92,55 +106,169 @@ createApp({
         });
 
         const generateId = () => 'item_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        const localDateStr = (dt = new Date()) => { const m = dt.getMonth() + 1, d = dt.getDate(); return `${dt.getFullYear()}-${m < 10 ? '0' + m : m}-${d < 10 ? '0' + d : d}`; };
+        const fmtExpDate = (s) => { if (!s) return ''; const p = String(s).split('-'); return p.length === 3 ? `${p[1]}/${p[2]}` : s; };
         const getWeatherIcon = (c) => { if (c === 0) return 'ph-sun'; if (c < 4) return 'ph-cloud-sun'; if (c < 50) return 'ph-cloud-fog'; if (c < 70) return 'ph-cloud-rain'; return 'ph-cloud'; };
         const getTimePeriod = (t) => { if (!t) return '時間'; const h = parseInt(t.split(':')[0]); return h < 5 ? '凌晨' : h < 11 ? '上午' : h < 14 ? '中午' : h < 18 ? '下午' : '晚上'; };
 
+        // ---- App 內回饋系統（取代原生 alert/confirm/prompt）----
+        // appConfirm：底部確認 sheet，回傳 Promise<boolean>；opts.link 顯示可複製連結
+        const dialog = reactive({ show: false, title: '', message: '', confirmText: '確定', cancelText: '取消', danger: false, showCancel: true, link: '' });
+        let dialogResolve = null;
+        const appConfirm = (message, opts = {}) => new Promise((resolve) => {
+            dialog.title = opts.title || '';
+            dialog.message = message;
+            dialog.confirmText = opts.confirmText || '確定';
+            dialog.cancelText = opts.cancelText || '取消';
+            dialog.danger = !!opts.danger;
+            dialog.showCancel = opts.showCancel !== false;
+            dialog.link = opts.link || '';
+            dialogResolve = resolve;
+            dialog.show = true;
+        });
+        const dialogAnswer = (ok) => {
+            dialog.show = false;
+            if (dialogResolve) { dialogResolve(ok); dialogResolve = null; }
+        };
+
+        // showToast：底部提示；opts.undo 提供復原函式時顯示「復原」鈕（刪除類操作用，取代確認框）
+        const toast = reactive({ show: false, message: '', icon: '', hasUndo: false });
+        let toastUndoFn = null;
+        let toastTimer = null;
+        const showToast = (message, opts = {}) => {
+            if (toastTimer) clearTimeout(toastTimer);
+            toast.message = message;
+            toast.icon = opts.icon || 'ph-bold ph-check-circle';
+            toastUndoFn = opts.undo || null;
+            toast.hasUndo = !!toastUndoFn;
+            toast.show = true;
+            toastTimer = setTimeout(() => { toast.show = false; toastUndoFn = null; }, opts.duration || (toastUndoFn ? 5000 : 2200));
+        };
+        const undoToast = () => {
+            if (toastUndoFn) toastUndoFn();
+            toastUndoFn = null;
+            toast.show = false;
+            if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+        };
+
         const toggleFlightCard = () => { if (currentDay.value.flight) { } else { currentDay.value.flight = { type: 'arrival', startTime: '10:00', startAirport: 'TPE', number: '', endTime: '14:00', endAirport: 'DEST', arrivalOffset: 0 }; editingState.flight = true; } };
-        const removeFlight = () => { if (confirm('確定移除此航班資訊?')) { if (days.value[currentDayIdx.value]) { days.value[currentDayIdx.value].flight = null; } editingState.flight = false; } };
+        const removeFlight = () => {
+            const day = days.value[currentDayIdx.value];
+            if (!day || !day.flight) return;
+            const removed = day.flight;
+            day.flight = null;
+            editingState.flight = false;
+            showToast('已移除航班資訊', { icon: 'ph-bold ph-trash', undo: () => { day.flight = removed; } });
+        };
         const getDotColor = (t) => { if (t === 'food') return 'bg-orange-400 border-orange-100 ring-2 ring-orange-50'; if (t === 'shop') return 'bg-pink-400 border-pink-100 ring-2 ring-pink-50'; if (t === 'transport' || t === 'flight') return 'bg-blue-500 border-blue-100 ring-2 ring-blue-50'; return 'bg-primary-500 border-primary-100 ring-2 ring-primary-50'; };
         const updateParticipants = () => { participants.value = participantsStr.value.split(',').map(s => s.trim()).filter(s => s); };
         const updateDate = (e, day) => { const val = e.target.value; if (!val) return; day.fullDate = val; const [y, m, d] = val.split('-').map(Number); const dt = new Date(y, m - 1, d); const w = ['日', '一', '二', '三', '四', '五', '六'][dt.getDay()]; day.date = `${m < 10 ? '0' + m : m}/${d < 10 ? '0' + d : d} (${w})`; day.shortDate = `${m}/${d}`; };
         const isUrl = (str) => { if (!str) return false; try { new URL(str); return true; } catch { return /^https?:\/\//i.test(str); } };
 
-        const addItem = () => {
-            const newItem = { id: generateId(), time: '', type: 'spot', activity: '', location: '', link: '', note: '' };
-            currentDay.value.items.push(newItem);
-            editingState.items[newItem.id] = true;
-        };
-        const removeItem = (item) => {
-            if (confirm('確定刪除此行程?')) {
-                const idx = currentDay.value.items.findIndex(i => i.id === item.id);
-                if (idx !== -1) {
-                    currentDay.value.items.splice(idx, 1);
-                    delete editingState.items[item.id];
-                }
-            }
-        };
-        const toggleEditItem = (item) => {
-            if (editingState.items[item.id]) {
-                // 使用明確賦值而非 delete，確保 Vue reactive 能偵測變更
-                editingState.items[item.id] = false;
-                // 依時間排序（00:00-23:59 由上到下），無時間的排到最後
-                if (currentDay.value && currentDay.value.items) {
-                    currentDay.value.items.sort((a, b) => {
-                        if (!a.time && !b.time) return 0;
-                        if (!a.time) return 1;
-                        if (!b.time) return -1;
-                        return a.time.localeCompare(b.time);
-                    });
-                }
-                // 同時觸發儲存
-                nextTick(() => debouncedSave());
+        // ---- 新增/編輯統一走底部彈窗（draft 草稿制：儲存才寫回，取消不留痕）----
+        const sortItemsByTime = (items) => items.sort((a, b) => {
+            if (!a.time && !b.time) return 0;
+            if (!a.time) return 1;
+            if (!b.time) return -1;
+            return a.time.localeCompare(b.time);
+        });
+
+        // 行程項目彈窗
+        const itemModal = reactive({ show: false, mode: 'add', targetId: null, draft: null });
+        const openItemModal = (item = null) => {
+            if (item) {
+                itemModal.mode = 'edit'; itemModal.targetId = item.id;
+                itemModal.draft = JSON.parse(JSON.stringify(item));
             } else {
-                editingState.items[item.id] = true;
+                itemModal.mode = 'add'; itemModal.targetId = null;
+                itemModal.draft = { id: generateId(), time: '', type: 'spot', activity: '', location: '', link: '', note: '' };
             }
+            itemModal.show = true;
+            if (!item) nextTick(() => { document.querySelector('.js-item-activity')?.focus(); });
         };
-        const isEditingItem = (item) => !!editingState.items[item.id];
+        const saveItemModal = () => {
+            const day = days.value[currentDayIdx.value];
+            if (!day) { itemModal.show = false; return; }
+            if (itemModal.mode === 'edit') {
+                const target = day.items.find(i => i.id === itemModal.targetId);
+                if (target) Object.assign(target, itemModal.draft);
+            } else {
+                day.items.push({ ...itemModal.draft });
+            }
+            sortItemsByTime(day.items); // 保留鐵則：完成編輯後依時間自動排序
+            itemModal.show = false;
+        };
+        const deleteItemFromModal = () => {
+            const day = days.value[currentDayIdx.value];
+            itemModal.show = false;
+            if (!day) return;
+            const idx = day.items.findIndex(i => i.id === itemModal.targetId);
+            if (idx === -1) return;
+            const removed = day.items.splice(idx, 1)[0];
+            showToast('已刪除行程', { icon: 'ph-bold ph-trash', undo: () => { day.items.splice(Math.min(idx, day.items.length), 0, removed); } });
+        };
+
         const addDay = () => days.value.push({ date: `Day ${days.value.length + 1}`, title: '', items: [] });
-        const addSavedLocation = () => { savedLocations.value.push({ id: generateId(), name: '', link: '', note: '' }); };
-        const removeSavedLocation = (idx) => { if (confirm('確定移除此地點?')) savedLocations.value.splice(idx, 1); };
-        const addExpense = () => { if (!newExpense.value.item) { alert('請輸入消費項目'); return; } if (!newExpense.value.amount) { isAmountInvalid.value = true; nextTick(() => { amountInputRef.value?.focus(); }); return; } expenses.value.unshift({ ...newExpense.value }); newExpense.value.item = ''; newExpense.value.amount = ''; isAmountInvalid.value = false; };
-        const removeExpense = (idx) => expenses.value.splice(idx, 1);
+
+        // 口袋名單彈窗
+        const locModal = reactive({ show: false, mode: 'add', targetId: null, draft: null });
+        const openLocModal = (loc = null) => {
+            if (loc) {
+                locModal.mode = 'edit'; locModal.targetId = loc.id;
+                locModal.draft = JSON.parse(JSON.stringify(loc));
+                if (!locModal.draft.type) locModal.draft.type = 'spot';
+            } else {
+                locModal.mode = 'add'; locModal.targetId = null;
+                locModal.draft = { id: generateId(), name: '', type: 'spot', link: '', note: '' };
+            }
+            locModal.show = true;
+            if (!loc) nextTick(() => { document.querySelector('.js-loc-name')?.focus(); });
+        };
+        const saveLocModal = () => {
+            if (locModal.mode === 'edit') {
+                const target = savedLocations.value.find(l => l.id === locModal.targetId);
+                if (target) Object.assign(target, locModal.draft);
+            } else {
+                savedLocations.value.push({ ...locModal.draft });
+            }
+            locModal.show = false;
+        };
+        const deleteLocFromModal = () => {
+            locModal.show = false;
+            const idx = savedLocations.value.findIndex(l => l.id === locModal.targetId);
+            if (idx === -1) return;
+            const removed = savedLocations.value.splice(idx, 1)[0];
+            showToast('已刪除地點', { icon: 'ph-bold ph-trash', undo: () => { savedLocations.value.splice(Math.min(idx, savedLocations.value.length), 0, removed); } });
+        };
+
+        // 記帳：快速新增保留內聯表單；既有支出點列開彈窗編輯
+        const itemInputRef = ref(null);
+        const isItemInvalid = ref(false);
+        const addExpense = () => {
+            if (!newExpense.value.item) { isItemInvalid.value = true; nextTick(() => { itemInputRef.value?.focus(); }); return; }
+            if (!newExpense.value.amount) { isAmountInvalid.value = true; nextTick(() => { amountInputRef.value?.focus(); }); return; }
+            expenses.value.unshift({ ...newExpense.value, id: generateId(), date: localDateStr() });
+            newExpense.value.item = ''; newExpense.value.amount = ''; isItemInvalid.value = false; isAmountInvalid.value = false;
+        };
+        const expModal = reactive({ show: false, targetId: null, draft: null });
+        const openExpModal = (exp) => {
+            expModal.targetId = exp.id;
+            expModal.draft = JSON.parse(JSON.stringify(exp));
+            expModal.show = true;
+        };
+        const saveExpModal = () => {
+            const target = expenses.value.find(e => e.id === expModal.targetId);
+            if (target) Object.assign(target, expModal.draft);
+            expModal.show = false;
+        };
+        const deleteExpFromModal = () => {
+            expModal.show = false;
+            const idx = expenses.value.findIndex(e => e.id === expModal.targetId);
+            if (idx === -1) return;
+            const removed = expenses.value.splice(idx, 1)[0];
+            showToast('已刪除支出', { icon: 'ph-bold ph-trash', undo: () => { expenses.value.splice(Math.min(idx, expenses.value.length), 0, removed); } });
+        };
+        const updateExchangeRate = () => { if (setup.value) setup.value.rate = exchangeRate.value; };
 
         const getExternalMapLink = (loc) => { if (!loc) return '#'; if (isUrl(loc)) return loc; const encodedLoc = encodeURIComponent(loc); if (setup.value.mapProvider === 'naver') return `https://map.naver.com/v5/search/${encodedLoc}`; else if (setup.value.mapProvider === 'amap') return `https://www.amap.com/search?query=${encodedLoc}`; else return `https://www.google.com/maps/search/?api=1&query=${encodedLoc}`; };
         const countryInfoMap = { 'jp': { c: 'JPY', l: 'ja', n: '日文', m: 'google' }, 'kr': { c: 'KRW', l: 'ko', n: '韓文', m: 'naver' }, 'us': { c: 'USD', l: 'en', n: '英文', m: 'google' }, 'cn': { c: 'CNY', l: 'zh-CN', n: '簡中', m: 'amap' }, 'th': { c: 'THB', l: 'th', n: '泰文', m: 'google' }, 'tw': { c: 'TWD', l: 'zh-TW', n: '中文', m: 'google' } };
@@ -149,7 +277,10 @@ createApp({
         const toggleWeatherEdit = () => { isWeatherEditing.value = !isWeatherEditing.value; if (isWeatherEditing.value) { nextTick(() => weatherInputRef.value?.focus()); } };
         const updateWeatherLocation = () => { isWeatherEditing.value = false; if (weather.value.location) { fetchWeather(weather.value.location); } };
         const fetchWeather = async (locName) => { try { weather.value.location = locName; const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locName)}&limit=1`); const geoData = await geoRes.json(); if (geoData?.[0]) { const { lat, lon } = geoData[0]; const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&forecast_days=16`); const wData = await wRes.json(); weather.value.temp = Math.round(wData.current_weather.temperature); weather.value.icon = getWeatherIcon(wData.current_weather.weathercode); if (wData.daily) weather.value.daily = wData.daily; } } catch (e) { weather.value.temp = '--'; } };
-        const initSortable = () => { const el = document.getElementById('saved-locations-list'); if (el) { Sortable.create(el, { animation: 150, delay: 200, delayOnTouchOnly: true, ghostClass: 'sortable-ghost', dragClass: 'sortable-drag', onEnd: (evt) => { const item = savedLocations.value.splice(evt.oldIndex, 1)[0]; savedLocations.value.splice(evt.newIndex, 0, item); } }); } };
+        // 主內容包在 <transition mode="out-in">，切到口袋分頁時容器要等舊視圖淡出後才進 DOM，
+        // 所以不能只在 nextTick 找一次——輪詢等到元素出現再掛，且防重複掛載
+        const initSortable = () => { const el = document.getElementById('saved-locations-list'); if (!el) return false; if (Sortable.get && Sortable.get(el)) return true; Sortable.create(el, { animation: 150, handle: '.loc-drag-handle', ghostClass: 'sortable-ghost', dragClass: 'sortable-drag', onEnd: (evt) => { const item = savedLocations.value.splice(evt.oldIndex, 1)[0]; savedLocations.value.splice(evt.newIndex, 0, item); } }); return true; };
+        const initSortableWhenReady = () => { let tries = 0; const tryInit = () => { if (!initSortable() && ++tries < 30) setTimeout(tryInit, 100); }; nextTick(tryInit); };
 
         const loadTripList = () => {
             const list = localStorage.getItem('travel_app_index');
@@ -168,15 +299,16 @@ createApp({
             showTripMenu.value = false;
             setup.value = { destination: '', startDate: new Date().toISOString().split('T')[0], days: 5, rate: 1, currency: 'TWD', langCode: 'zh-TW', langName: '中文', mapProvider: 'google' };
             weather.value.location = '';
-            participantsStr.value = '班, 熊';
-            participants.value = ['班', '熊'];
+            participantsStr.value = '';
+            participants.value = [];
+            newExpense.value.payer = '';
             isRateLoading.value = false;
             nextTick(() => ignoreRemoteUpdate = false);
         };
 
         const joinTrip = () => {
             const input = joinTripUrl.value.trim();
-            if (!input) { alert('請貼上行程連結或 ID'); return; }
+            if (!input) { showToast('請貼上行程連結或 ID', { icon: 'ph-bold ph-warning' }); return; }
             // 從 URL 中提取 tripId，或直接使用輸入值作為 ID
             let tripId = input;
             try {
@@ -186,7 +318,7 @@ createApp({
             } catch (e) {
                 // 不是 URL 格式，直接當作 tripId 使用
             }
-            if (!tripId) { alert('無法解析行程 ID'); return; }
+            if (!tripId) { showToast('無法解析行程 ID', { icon: 'ph-bold ph-warning' }); return; }
             // 檢查是否已存在
             if (tripList.value.find(t => t.id === tripId)) {
                 switchTrip(tripId);
@@ -224,8 +356,8 @@ createApp({
             showSetupModal.value = false;
         };
 
-        const initTrip = () => {
-            if (!setup.value.destination) { alert('請輸入目的地'); return; }
+        const initTrip = async () => {
+            if (!setup.value.destination) { showToast('請先填寫目的地', { icon: 'ph-bold ph-warning' }); return; }
 
             if (isEditing.value && currentTripId.value) {
                 if (setup.value.destination) {
@@ -253,7 +385,8 @@ createApp({
                     const addCount = newDaysCount - days.value.length;
                     for (let i = 0; i < addCount; i++) { days.value.push({ items: [], flight: null, title: '自由活動' }); }
                 } else if (newDaysCount < days.value.length) {
-                    if (confirm('天數減少，多出的行程將被刪除，確定嗎？')) { days.value.splice(newDaysCount); }
+                    const ok = await appConfirm('天數減少，多出天數的行程將被刪除，確定嗎？', { title: '減少天數', danger: true, confirmText: '確定刪除' });
+                    if (ok) { days.value.splice(newDaysCount); }
                     else { setup.value.days = days.value.length; }
                 }
 
@@ -303,8 +436,9 @@ createApp({
             expenses.value = [];
             savedLocations.value = [];
             exchangeRate.value = setup.value.rate;
-            participantsStr.value = '班, 熊';
-            participants.value = ['班', '熊'];
+            participantsStr.value = '';
+            participants.value = [];
+            newExpense.value.payer = '';
 
             tripList.value.unshift(newTripMeta);
             saveTripList();
@@ -322,7 +456,8 @@ createApp({
         };
 
         const deleteTrip = async (id) => {
-            if (!confirm('確定刪除此行程？無法復原。')) return;
+            const ok = await appConfirm('整份行程與記帳將一併刪除，無法復原。', { title: '刪除旅程', danger: true, confirmText: '永久刪除' });
+            if (!ok) return;
             // 1. Remove from local list
             tripList.value = tripList.value.filter(t => t.id !== id);
             saveTripList();
@@ -363,9 +498,9 @@ createApp({
             } else {
                 try {
                     await navigator.clipboard.writeText(url.toString());
-                    alert('連結已複製！傳送給朋友即可共同編輯。');
+                    showToast('連結已複製！傳給朋友即可共編', { icon: 'ph-bold ph-link' });
                 } catch (e) {
-                    prompt('請複製以下連結分享：', url.toString());
+                    appConfirm('自動複製失敗，請長按下方連結複製分享：', { title: '分享行程', link: url.toString(), showCancel: false, confirmText: '關閉' });
                 }
             }
         };
@@ -382,6 +517,7 @@ createApp({
 
             isDataLoading.value = true;
             currentDayIdx.value = 0; // Reset only on initial trip switch
+            let isFirstSnapshot = true;
             // Listen to 'trips' collection directly
             unsubscribeTripData = onSnapshot(doc(db, 'trips', id), (docSnap) => {
                 isDataLoading.value = false;
@@ -405,7 +541,24 @@ createApp({
 
                     days.value = data.days || [];
                     expenses.value = data.expenses || [];
+                    expenses.value.forEach(e => { if (e && !e.id) e.id = generateId(); });
                     savedLocations.value = (data.locations || []).filter(l => l);
+
+                    // 初次載入自動跳到「今天」（若今天落在行程日期區間內），並把當天 chip 捲入視野
+                    if (isFirstSnapshot) {
+                        isFirstSnapshot = false;
+                        const now = new Date();
+                        const mm = now.getMonth() + 1, dd = now.getDate();
+                        const todayStr = `${now.getFullYear()}-${mm < 10 ? '0' + mm : mm}-${dd < 10 ? '0' + dd : dd}`;
+                        const todayIdx = days.value.findIndex(d => d.fullDate === todayStr);
+                        if (todayIdx !== -1) {
+                            currentDayIdx.value = todayIdx;
+                            nextTick(() => {
+                                const chip = document.querySelector(`[data-day-idx="${todayIdx}"]`);
+                                if (chip) chip.scrollIntoView({ inline: 'center', block: 'nearest' });
+                            });
+                        }
+                    }
 
                     // Prevent setup leakage from previous trip
                     const defaultSetup = { destination: '', startDate: new Date().toISOString().split('T')[0], days: 5, rate: 1, currency: 'TWD', langCode: 'zh-TW', langName: '中文', mapProvider: 'google' };
@@ -415,9 +568,10 @@ createApp({
                     if (data.users) {
                         participantsStr.value = data.users;
                     } else {
-                        participantsStr.value = '班, 熊'; // Default for old data
+                        participantsStr.value = '';
                     }
                     updateParticipants();
+                    if (!participants.value.includes(newExpense.value.payer)) newExpense.value.payer = participants.value[0] || '';
 
                     if (data.weather_loc) {
                         if (weather.value) weather.value.location = data.weather_loc;
@@ -440,6 +594,20 @@ createApp({
                     nextTick(() => ignoreRemoteUpdate = false);
                 } else {
                     isDataLoading.value = false;
+                    // 加入了不存在的行程（連結／ID 錯誤或已刪除）——給回饋並移除殭屍項
+                    const meta = tripList.value.find(t => t.id === currentTripId.value);
+                    if (meta && meta.destination === '載入中...') {
+                        showToast('找不到此行程，可能連結錯誤或已被刪除', { icon: 'ph-bold ph-warning', duration: 3500 });
+                        tripList.value = tripList.value.filter(t => t.id !== currentTripId.value);
+                        saveTripList();
+                        if (unsubscribeTripData) { unsubscribeTripData(); unsubscribeTripData = null; }
+                        if (tripList.value.length > 0) {
+                            switchTrip(tripList.value[0].id);
+                        } else {
+                            currentTripId.value = null;
+                            showSetupModal.value = true;
+                        }
+                    }
                 }
             }, (error) => {
                 console.error("Snapshot error:", error);
@@ -552,26 +720,35 @@ createApp({
                 }
             });
 
-            watch(viewMode, (newVal) => { if (newVal === 'locations') { nextTick(() => initSortable()); } });
+            watch(viewMode, (newVal) => { if (newVal === 'locations') { initSortableWhenReady(); } });
+
+            // Vue 已掛載，App 外殼可見即散場啟動畫面（取代固定 2.8 秒假 splash）
+            nextTick(() => { if (window.__hideSplash) window.__hideSplash(); });
         });
 
         return {
             viewMode, currentDayIdx, days, currentDay, participants, participantsStr, updateParticipants,
-            getExternalMapLink, addItem, removeItem, removeFlight, addDay,
-            expenses, newExpense, totalExpense, addExpense, removeExpense,
+            getExternalMapLink, removeFlight, addDay,
+            expenses, newExpense, totalExpense, addExpense,
             paidByPerson, exchangeRate,
+            newParticipant, addParticipant, removeParticipant,
+            updateExchangeRate, localDateStr, fmtExpDate,
             weather, getTimePeriod,
             updateDate, showSetupModal, setup, initTrip, weatherDisplay, detectRate, isRateLoading, currencyLabel, currencySymbol, toggleFlightCard, getDotColor,
             showTripMenu, tripList, createNewTrip, switchTrip, deleteTrip, currentTripId,
-            openEditModal, cancelSetupModal, isEditing, mapProviderLabel, amountInputRef, isAmountInvalid, isUrl,
-            editingState, toggleEditItem, isEditingItem,
-            savedLocations, addSavedLocation, removeSavedLocation,
+            openEditModal, cancelSetupModal, isEditing, mapProviderLabel, amountInputRef, isAmountInvalid, itemInputRef, isItemInvalid, isUrl,
+            editingState,
+            savedLocations,
             updateRateByCurrency,
             toggleWeatherEdit, isWeatherEditing, updateWeatherLocation, weatherInputRef,
-            isLocationsEditing, loadTripList,
+            loadTripList,
             isDataLoading, isLoggedIn, dbError, dbErrorCode, dbErrorMessage, retryConnection, syncStatus,
             shareTrip, showShareModal,
-            showJoinInput, joinTripUrl, joinTrip
+            showJoinInput, joinTripUrl, joinTrip,
+            dialog, dialogAnswer, toast, undoToast,
+            itemModal, openItemModal, saveItemModal, deleteItemFromModal,
+            locModal, openLocModal, saveLocModal, deleteLocFromModal,
+            expModal, openExpModal, saveExpModal, deleteExpFromModal
         };
     }
 }).mount('#app')

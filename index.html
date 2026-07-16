@@ -200,10 +200,77 @@
             transform: translateY(20px);
         }
 
+        /* Bottom Sheet 容器：跟著可視視口走（iOS 鍵盤彈出時 --vvh 由 JS 更新，sheet 底貼鍵盤上緣）
+           min(…,100%) 讓桌機置中框不受 window 高度影響 */
+        .sheet-host {
+            height: min(var(--vvh, 100%), 100%);
+            transition: height 0.25s ease;
+        }
+
+        /* Bottom Sheet（編輯彈窗/確認 sheet）進出場 */
+        .sheet-enter-active,
+        .sheet-leave-active {
+            transition: opacity 0.25s ease;
+        }
+
+        .sheet-enter-active .sheet-panel {
+            transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .sheet-leave-active .sheet-panel {
+            transition: transform 0.2s ease-in;
+        }
+
+        .sheet-enter-from,
+        .sheet-leave-to {
+            opacity: 0;
+        }
+
+        .sheet-enter-from .sheet-panel,
+        .sheet-leave-to .sheet-panel {
+            transform: translateY(100%);
+        }
+
+        /* Toast 進出場 */
+        .toast-enter-active {
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .toast-leave-active {
+            transition: all 0.2s ease-in;
+        }
+
+        .toast-enter-from,
+        .toast-leave-to {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            .sheet-enter-active,
+            .sheet-leave-active,
+            .sheet-enter-active .sheet-panel,
+            .sheet-leave-active .sheet-panel,
+            .toast-enter-active,
+            .toast-leave-active,
+            .sheet-host {
+                transition: none;
+            }
+        }
+
         .sortable-ghost {
             opacity: 0.4;
             background: #f0fdfa;
             border: 2px dashed #5eead4;
+        }
+
+        /* 拖曳把手：touch-action 只擋捲動，iOS 長押選字/callout 要另外禁，否則 touchcancel 會砍掉拖曳 */
+        .loc-drag-handle {
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
         }
 
         .sortable-drag {
@@ -222,7 +289,7 @@
     </style>
 </head>
 
-<body class="text-stone-600 h-screen flex flex-col overflow-hidden bg-stone-50">
+<body class="text-stone-600 h-[100dvh] flex flex-col overflow-hidden bg-stone-50">
 
     <!-- Loading Splash Screen -->
     <div id="loading-screen" style="
@@ -298,15 +365,17 @@
                 if (bar) bar.style.width = '100%';
             });
         });
-        // Fade out and remove loading screen after 2.8 seconds
-        setTimeout(() => {
+        // 隱藏啟動畫面：App 掛載完成即散場（app.js onMounted 呼叫 window.__hideSplash），最多保底 1 秒
+        window.__hideSplash = () => {
             const screen = document.getElementById('loading-screen');
-            if (screen) {
+            if (screen && !screen.dataset.hidden) {
+                screen.dataset.hidden = '1';
                 screen.style.opacity = '0';
                 screen.style.visibility = 'hidden';
-                setTimeout(() => screen.remove(), 500);
+                setTimeout(() => screen.remove(), 400);
             }
-        }, 2800);
+        };
+        setTimeout(() => window.__hideSplash(), 1000);
     </script>
 
     <div id="app" v-cloak
@@ -388,37 +457,10 @@
                 </div>
             </div>
 
-            <!-- Row 2: View Switcher (Full Width) -->
-            <div class="px-4 pb-2">
-                <div class="flex bg-white/80 backdrop-blur-sm p-2 rounded-3xl w-full justify-between shadow-soft gap-2">
-                    <button @click="viewMode = 'plan'"
-                        :class="viewMode === 'plan' ? 'bg-primary-100 text-primary-600 shadow-inner ring-2 ring-primary-200 with-bow relative' : 'text-stone-400 hover:text-stone-600 hover:bg-stone-50'"
-                        class="flex-1 py-3 rounded-2xl transition-all flex justify-center"><img
-                            src="assets/icn_date.png" style="width:3rem;height:3rem" class="object-contain"
-                            alt="Date"></button>
-                    <button @click="viewMode = 'locations'"
-                        :class="viewMode === 'locations' ? 'bg-primary-100 text-primary-600 shadow-inner ring-2 ring-primary-200 with-bow relative' : 'text-stone-400 hover:text-stone-600 hover:bg-stone-50'"
-                        class="flex-1 py-3 rounded-2xl transition-all flex justify-center"><img
-                            src="assets/icn_pocket.png" style="width:3rem;height:3rem" class="object-contain"
-                            alt="Pocket"></button>
-                    <button @click="viewMode = 'money'"
-                        :class="viewMode === 'money' ? 'bg-primary-100 text-primary-600 shadow-inner ring-2 ring-primary-200 with-bow relative' : 'text-stone-400 hover:text-stone-600 hover:bg-stone-50'"
-                        class="flex-1 py-3 rounded-2xl transition-all flex justify-center"><img
-                            src="assets/icn_money.png" style="width:3rem;height:3rem" class="object-contain"
-                            alt="Money"></button>
-                    <div class="w-[1px] h-6 bg-stone-200 mx-1 self-center"></div>
-                    <button @click="viewMode = 'translate'"
-                        :class="viewMode === 'translate' ? 'bg-hello-blue/10 text-hello-blue shadow-inner ring-2 ring-hello-blue/30 with-bow relative' : 'text-stone-400 hover:text-hello-blue hover:bg-blue-50'"
-                        class="flex-1 py-3 rounded-2xl transition-all flex justify-center"><img
-                            src="assets/icn_trans.png" style="width:3rem;height:3rem" class="object-contain"
-                            alt="Translate"></button>
-                </div>
-            </div>
-
             <!-- Days Scroller -->
             <div v-if="viewMode === 'plan'"
                 class="flex overflow-x-auto hide-scroll px-4 pb-3 pt-3 space-x-3 snap-x border-b border-stone-50 w-full touch-pan-x overscroll-contain">
-                <div v-for="(day, index) in days" :key="index" @click="currentDayIdx = index"
+                <div v-for="(day, index) in days" :key="index" @click="currentDayIdx = index" :data-day-idx="index"
                     class="snap-center shrink-0 flex flex-col items-center justify-center w-[4.5rem] h-[5rem] rounded-[1rem] cursor-pointer transition-all border-0 relative"
                     :class="currentDayIdx === index ? 'bg-primary-300 text-white shadow-glow scale-105 with-bow' : 'bg-primary-50 text-stone-500 hover:bg-primary-100'">
                     <span class="text-[10px] font-bold opacity-90">{{ day.shortDate }}</span>
@@ -473,8 +515,8 @@
                                 <div class="text-lg font-bold text-stone-800 px-1">{{ currentDay.title || '未設定主題' }}
                                 </div>
                                 <button @click="editingState.dayTitle = true"
-                                    class="text-stone-300 hover:text-primary-500"><i
-                                        class="ph-bold ph-pencil-simple"></i></button>
+                                    class="w-10 h-10 -mr-2 flex items-center justify-center text-stone-300 hover:text-primary-500"><i
+                                        class="ph-bold ph-pencil-simple text-lg"></i></button>
                             </div>
                         </div>
                         <input type="date" :value="currentDay.fullDate" @change="updateDate($event, currentDay)"
@@ -495,7 +537,7 @@
                                 <!-- 編輯模式：頂部工具列 -->
                                 <div v-if="editingState.flight"
                                     class="bg-white/50 backdrop-blur-sm border-b border-white/50 p-3 flex justify-between items-center relative z-10">
-                                    <span class="text-xs font-bold text-primary-500 ml-1">Edit Flight</span>
+                                    <span class="text-xs font-bold text-primary-500 ml-1">編輯航班</span>
                                     <div class="flex gap-2">
                                         <button @click="removeFlight"
                                             class="flex items-center gap-1 px-3 py-1.5 bg-white text-red-400 rounded-xl border border-red-100 shadow-sm hover:bg-red-50 transition text-xs font-bold">
@@ -527,7 +569,7 @@
                                         <div class="text-left w-1/3">
                                             <div v-if="editingState.flight" class="space-y-2">
                                                 <label
-                                                    class="text-[10px] text-primary-400 font-bold block uppercase tracking-wider">From</label>
+                                                    class="text-[10px] text-primary-400 font-bold block uppercase tracking-wider">出發</label>
                                                 <input v-model="currentDay.flight.startAirport"
                                                     class="text-xl font-black text-primary-600 bg-white/60 border-0 rounded-2xl p-2 w-full text-center focus:ring-2 focus:ring-primary-200 uppercase placeholder:text-primary-200 shadow-sm"
                                                     placeholder="TPE">
@@ -603,7 +645,7 @@
                                 class="w-full py-6 border-4 border-dashed border-primary-100 rounded-[2rem] text-primary-300 hover:border-primary-300 hover:text-primary-500 hover:bg-primary-50/50 transition flex flex-col items-center justify-center gap-2 group bg-white/50">
                                 <i
                                     class="ph-duotone ph-airplane-tilt text-4xl mb-1 group-hover:-rotate-12 transition-transform duration-300"></i>
-                                <span class="text-sm font-bold tracking-wide">Add Flight Information</span>
+                                <span class="text-sm font-bold tracking-wide">新增航班資訊</span>
                             </button>
                         </transition>
                     </div>
@@ -615,184 +657,62 @@
                                 <div class="absolute -left-[31px] top-5 w-4 h-4 rounded-full border-[3px] border-stone-50 shadow-sm z-10 transition-colors duration-300"
                                     :class="getDotColor(item.type)"></div>
 
-                                <div class="bg-white rounded-2xl shadow-soft border border-stone-100 transition-all duration-300 overflow-hidden relative"
-                                    :class="{'hover:shadow-lg hover:-translate-y-0.5': !isEditingItem(item)}">
+                                <!-- 行程卡（點卡片開彈窗編輯） -->
+                                <div @click="openItemModal(item)"
+                                    class="bg-white rounded-2xl shadow-soft border border-stone-100 transition-all duration-300 overflow-hidden relative cursor-pointer active:bg-stone-50 hover:shadow-lg"
+                                    style="background-image: url('assets/kitty_face_pink.png'); background-repeat: no-repeat; background-position: center; background-size: cover;">
 
-                                    <!-- Edit Mode Card -->
-                                    <div v-if="isEditingItem(item)"
-                                        class="bg-white rounded-2xl shadow-xl ring-2 ring-primary-500/20 p-4 space-y-4 relative z-20 m-[-1px]">
+                                    <i
+                                        class="ph-bold ph-pencil-simple text-stone-300 absolute top-3 right-3 z-20 pointer-events-none"></i>
 
-                                        <!-- Header: Type & Time -->
-                                        <div class="grid grid-cols-[7rem_1fr] gap-3 items-start">
-                                            <div>
-                                                <label
-                                                    class="text-[10px] font-bold text-stone-500 uppercase mb-1 block">時間</label>
-                                                <input v-model="item.time" type="time"
-                                                    class="w-full h-12 bg-stone-50 border border-stone-200 rounded-xl px-2 text-xl font-bold text-stone-700 focus:outline-none focus:ring-2 focus:ring-primary-100 font-mono text-center appearance-none">
+                                    <div class="flex gap-3 p-1 pr-3 items-start relative">
+                                        <!-- Time & Type -->
+                                        <div
+                                            class="bg-stone-50 rounded-xl p-2 w-20 flex flex-col items-center justify-center gap-1 shrink-0 border border-stone-100 group-hover:border-primary-100 transition-colors self-start h-20">
+                                            <div class="text-center">
+                                                <div class="text-[9px] text-stone-500 font-medium">{{
+                                                    getTimePeriod(item.time) }}</div>
+                                                <div class="text-lg font-black text-stone-700 font-mono leading-none">
+                                                    {{ item.time || '--:--' }}</div>
                                             </div>
-                                            <div>
-                                                <label
-                                                    class="text-[10px] font-bold text-stone-500 uppercase mb-1 block">類型</label>
-                                                <div
-                                                    class="flex h-12 bg-stone-50 p-1 rounded-xl border border-stone-200 items-stretch">
-                                                    <button v-for="type in ['spot', 'food', 'shop', 'transport']"
-                                                        :key="type" @click="item.type = type"
-                                                        class="flex-1 rounded-lg flex items-center justify-center text-xl transition-colors"
-                                                        :class="item.type === type ? 'bg-white shadow-sm scale-100' : 'opacity-40 hover:opacity-100'">
-                                                        <span v-if="type==='spot'">📍</span>
-                                                        <span v-else-if="type==='food'">🍴</span>
-                                                        <span v-else-if="type==='shop'">🛍️</span>
-                                                        <span v-else-if="type==='transport'">🚇</span>
-                                                    </button>
-                                                </div>
+                                            <div class="text-xl mt-1">
+                                                <span v-if="item.type==='spot'">📍</span>
+                                                <span v-else-if="item.type==='food'">🍴</span>
+                                                <span v-else-if="item.type==='shop'">🛍️</span>
+                                                <span v-else-if="item.type==='transport'">🚇</span>
+                                                <span v-else>📍</span>
                                             </div>
                                         </div>
 
                                         <!-- Content -->
-                                        <div class="space-y-3">
-                                            <div>
-                                                <input v-model="item.activity"
-                                                    class="w-full text-lg font-bold text-stone-800 placeholder:text-stone-300 border-b-2 border-stone-100 focus:border-primary-400 bg-transparent py-1 focus:outline-none transition-colors"
-                                                    placeholder="行程名稱...">
-                                            </div>
+                                        <div class="flex-1 py-2 min-w-0 flex flex-col justify-center pr-1">
+                                            <div class="font-bold text-stone-800 text-base pr-6">{{ item.activity ||
+                                                '未命名行程' }}</div>
 
-                                            <!-- Location & Link -->
-                                            <div
-                                                class="flex items-center gap-2 bg-stone-50 rounded-xl px-3 py-2 border border-stone-100 focus-within:border-primary-200 focus-within:bg-white transition-colors">
-                                                <i class="ph-bold ph-map-pin text-stone-500 shrink-0"></i>
-                                                <div class="flex-1 min-w-0 flex flex-col">
-                                                    <input v-model="item.location"
-                                                        class="text-sm font-medium bg-transparent focus:outline-none text-stone-700 w-full truncate"
-                                                        placeholder="地點名稱">
-                                                    <input v-model="item.link"
-                                                        class="text-[10px] text-stone-500 bg-transparent focus:outline-none w-full truncate font-mono"
-                                                        placeholder="http://地圖連結...">
+                                            <a v-if="item.link || item.location"
+                                                :href="getExternalMapLink(item.link || item.location)" target="_blank"
+                                                @click.stop
+                                                class="relative z-10 flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-all border group/btn w-full mt-2"
+                                                :class="isUrl(item.link || item.location) ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-primary-50 text-primary-700 border-primary-100 hover:bg-primary-100'">
+                                                <div class="flex items-center gap-2 truncate pr-2">
+                                                    <i
+                                                        :class="isUrl(item.link || item.location) ? 'ph-bold ph-globe' : 'ph-bold ph-navigation-arrow'"></i>
+                                                    <span class="truncate">{{ isUrl(item.link || item.location)
+                                                        ? '開啟連結' :
+                                                        '開啟導航' }}</span>
                                                 </div>
-                                            </div>
+                                                <i class="ph-bold ph-arrow-right"></i>
+                                            </a>
 
-                                            <div class="relative">
-                                                <i
-                                                    class="ph-bold ph-notebook absolute top-2.5 left-3 text-stone-300"></i>
-                                                <textarea v-model="item.note"
-                                                    class="w-full bg-stone-50 rounded-xl py-2 pl-9 pr-3 text-sm text-stone-600 focus:outline-none focus:ring-2 focus:ring-primary-100 resize-none min-h-[60px]"
-                                                    placeholder="備註 (票卷/訂位編號...)"></textarea>
-                                            </div>
-                                        </div>
-
-                                        <!-- Actions -->
-                                        <div class="flex items-center justify-between pt-2 border-t border-stone-50">
-                                            <button @click="removeItem(item)"
-                                                class="text-red-400 hover:text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1">
-                                                <i class="ph-bold ph-trash"></i> 刪除
-                                            </button>
-                                            <button @click="toggleEditItem(item)"
-                                                class="bg-primary-600 text-white px-6 py-2 rounded-xl font-bold shadow-md shadow-primary-200 hover:bg-primary-700 transition active:scale-95 flex items-center gap-2">
-                                                <i class="ph-bold ph-check"></i> 完成
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- View Mode Card -->
-                                    <div v-else
-                                        class="bg-white rounded-2xl shadow-soft border border-stone-100 transition-all duration-300 overflow-hidden relative h-full flex flex-col"
-                                        :class="{'hover:shadow-lg hover:-translate-y-0.5': !isEditingItem(item)}"
-                                        style="background-image: url('assets/kitty_face_pink.png'); background-repeat: no-repeat; background-position: center; background-size: cover;">
-
-                                        <div class="flex gap-3 p-1 pr-3 items-start relative">
-
-                                            <!-- Edit Button (Visible only when NOT editing) -->
-                                            <div v-if="!isEditingItem(item)" class="absolute top-2 right-2 z-20">
-                                                <button @click="toggleEditItem(item)"
-                                                    class="w-7 h-7 flex items-center justify-center text-primary-500 bg-white/60 hover:text-primary-700 hover:bg-white rounded-lg transition shadow-sm">
-                                                    <i class="ph-bold ph-pencil-simple"></i>
-                                                </button>
-                                            </div>
-
-                                            <!-- Time & Type -->
-                                            <div
-                                                class="bg-stone-50 rounded-xl p-2 w-20 flex flex-col items-center justify-center gap-1 shrink-0 border border-stone-100 group-hover:border-primary-100 transition-colors self-start h-20">
-                                                <div v-if="isEditingItem(item)" class="w-full">
-                                                    <input v-model="item.time" type="time"
-                                                        class="w-full h-7 text-center bg-white border border-stone-200 rounded text-sm font-bold text-stone-700 focus:outline-none p-0 font-mono">
-                                                </div>
-                                                <div v-else class="text-center">
-                                                    <div class="text-[9px] text-stone-500 font-medium">{{
-                                                        getTimePeriod(item.time)
-                                                        }}</div>
-                                                    <div
-                                                        class="text-lg font-black text-stone-700 font-mono leading-none">
-                                                        {{
-                                                        item.time || '--:--' }}</div>
-                                                </div>
-
-                                                <select v-if="isEditingItem(item)" v-model="item.type"
-                                                    class="w-full h-7 text-[10px] font-bold text-center bg-white border border-stone-200 rounded-md py-0 appearance-none focus:ring-0 text-stone-500">
-                                                    <option value="spot">📍 景點</option>
-                                                    <option value="food">🍴 美食</option>
-                                                    <option value="shop">🛍️ 購物</option>
-                                                    <option value="transport">🚇 交通</option>
-                                                </select>
-                                                <div v-else class="text-xl mt-1">
-                                                    <span v-if="item.type==='spot'">📍</span>
-                                                    <span v-else-if="item.type==='food'">🍴</span>
-                                                    <span v-else-if="item.type==='shop'">🛍️</span>
-                                                    <span v-else-if="item.type==='transport'">🚇</span>
-                                                    <span v-else>📍</span>
-                                                </div>
-                                            </div>
-
-                                            <!-- Content -->
-                                            <div class="flex-1 py-2 min-w-0 flex flex-col justify-center pr-1">
-                                                <input v-if="isEditingItem(item)" v-model="item.activity"
-                                                    class="block w-full font-bold text-stone-800 bg-transparent border-b border-dashed border-stone-300 p-0 focus:ring-0 text-base placeholder:text-stone-300 focus:border-primary-400 mb-1"
-                                                    placeholder="行程名稱...">
-                                                <div v-else class="font-bold text-stone-800 text-base">{{ item.activity
-                                                    ||
-                                                    '未命名行程'
-                                                    }}</div>
-
-                                                <div class="flex flex-col gap-2 mt-1">
-                                                    <div v-if="isEditingItem(item)"
-                                                        class="flex items-center gap-2 bg-stone-50 rounded-lg px-2 py-1 border border-transparent focus-within:bg-white focus-within:border-primary-200 transition-all">
-                                                        <i class="ph-fill ph-link text-stone-300 text-xs"></i>
-                                                        <input v-model="item.location"
-                                                            class="flex-1 text-xs font-medium text-stone-600 bg-transparent border-none p-0 focus:ring-0 placeholder:text-stone-300"
-                                                            placeholder="輸入地點 或 貼上網址">
-                                                    </div>
-
-                                                    <a v-if="(item.link || item.location) && !isEditingItem(item)"
-                                                        :href="getExternalMapLink(item.link || item.location)"
-                                                        target="_blank"
-                                                        class="relative z-10 flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-all border group/btn w-full mt-1"
-                                                        :class="isUrl(item.link || item.location) ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-primary-50 text-primary-700 border-primary-100 hover:bg-primary-100'">
-                                                        <div class="flex items-center gap-2 truncate pr-2">
-                                                            <i
-                                                                :class="isUrl(item.link || item.location) ? 'ph-bold ph-globe' : 'ph-bold ph-navigation-arrow'"></i>
-                                                            <span class="truncate">{{ isUrl(item.link || item.location)
-                                                                ? '開啟連結' :
-                                                                '開啟導航' }}</span>
-                                                        </div>
-                                                        <i class="ph-bold ph-arrow-right"></i>
-                                                    </a>
-                                                </div>
-
-                                                <div v-if="isEditingItem(item) || item.note"
-                                                    class="flex items-start gap-2 mt-2 pt-1"
-                                                    :class="{'border-t border-stone-50': isEditingItem(item)}">
-                                                    <i class="ph-bold ph-notebook text-stone-300 text-xs mt-1"></i>
-                                                    <textarea v-if="isEditingItem(item)" v-model="item.note" rows="2"
-                                                        class="flex-1 text-xs text-stone-500 bg-transparent border-none p-0 focus:ring-0 placeholder:text-stone-200 resize-none leading-relaxed"
-                                                        placeholder="備註 (票卷/訂位)"></textarea>
-                                                    <div v-else
-                                                        class="flex-1 text-xs text-stone-500 leading-relaxed whitespace-pre-wrap">
-                                                        {{
-                                                        item.note }}</div>
-                                                </div>
+                                            <div v-if="item.note" class="flex items-start gap-2 mt-2 pt-1">
+                                                <i class="ph-bold ph-notebook text-stone-300 text-sm mt-0.5"></i>
+                                                <div class="flex-1 text-sm text-stone-600 leading-relaxed whitespace-pre-wrap">
+                                                    {{ item.note }}</div>
                                             </div>
                                         </div>
                                     </div>
-
                                 </div>
+                            </div>
                         </template>
 
 
@@ -801,79 +721,53 @@
 
                 <div v-else-if="viewMode === 'locations'" key="locations"
                     class="p-5 pb-32 space-y-6 flex-1 overflow-y-auto hide-scroll">
-                    <div class="flex justify-between items-start mb-4">
-                        <div class="text-left">
-                            <h2 class="text-2xl font-black text-stone-800 flex items-center gap-2">
-                                <img src="assets/bow_pink.png" class="w-8 h-8 object-contain" alt="Bow"> 口袋名單
-                            </h2>
-                            <p class="text-sm text-stone-500 pl-1">{{ isLocationsEditing ? '長押並拖曳可重新排序' : '蒐集想去的地點' }}
-                            </p>
-                        </div>
-                        <button @click="isLocationsEditing = !isLocationsEditing"
-                            :class="isLocationsEditing ? 'bg-primary-500 text-white shadow-lg' : 'bg-white text-stone-500 border border-stone-200 shadow-sm'"
-                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95">
-                            <i :class="isLocationsEditing ? 'ph-bold ph-check' : 'ph-bold ph-pencil-simple'"></i>
-                            {{ isLocationsEditing ? '完成' : '編輯' }}
-                        </button>
+                    <div class="mb-4">
+                        <h2 class="text-2xl font-black text-stone-800 flex items-center gap-2">
+                            <img src="assets/bow_pink.png" class="w-8 h-8 object-contain" alt="Bow"> 口袋名單
+                        </h2>
+                        <p class="text-sm text-stone-500 pl-1">點卡片可編輯・按住 ⠿ 拖曳排序</p>
                     </div>
 
                     <div id="saved-locations-list" class="space-y-4">
-                        <div v-for="(loc, idx) in savedLocations" :key="loc.id"
-                            class="location-card bg-white p-4 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-all relative group cursor-default"
-                            :data-id="loc.id">
-                            <div v-if="isLocationsEditing"
-                                class="absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center cursor-move text-stone-200 hover:text-primary-400 touch-none">
+                        <div v-for="loc in savedLocations" :key="loc.id" :data-id="loc.id"
+                            class="location-card bg-white rounded-2xl shadow-sm border border-stone-100 transition-all relative overflow-hidden">
+                            <!-- 拖曳把手（touch-none 讓 iOS 不搶手勢，是真機能拖的關鍵） -->
+                            <div class="loc-drag-handle absolute left-0 top-0 bottom-0 w-8 flex items-center justify-center touch-none cursor-move text-stone-300 z-20">
                                 <i class="ph-bold ph-dots-six-vertical text-xl"></i>
                             </div>
-                            <button v-if="isLocationsEditing" @click="removeSavedLocation(idx)"
-                                class="absolute top-2 right-2 text-stone-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition z-10"><i
-                                    class="ph-bold ph-trash"></i></button>
-
-                            <div class="flex flex-col gap-2 pr-8" :class="{'pl-6': isLocationsEditing}">
-                                <!-- Kitty Decoration -->
+                            <!-- 點一下開彈窗編輯 -->
+                            <div @click="openLocModal(loc)" class="py-4 pr-4 pl-9 cursor-pointer active:bg-stone-50 relative">
                                 <img src="assets/kitty1.png"
                                     class="absolute bottom-1 right-2 w-16 h-16 object-contain opacity-15 pointer-events-none z-0"
                                     alt="">
-                                <div v-if="isLocationsEditing">
-                                    <input v-model="loc.name"
-                                        class="font-bold text-lg text-stone-800 bg-transparent border-b border-dashed border-stone-300 pb-1 w-full focus:ring-0 focus:border-primary-400 placeholder:text-stone-300"
-                                        placeholder="地點名稱">
-                                </div>
-                                <div v-else class="font-bold text-lg text-stone-800">{{ loc.name || '未命名地點' }}</div>
-
-                                <div v-if="isLocationsEditing" class="flex flex-col gap-2">
-                                    <div
-                                        class="flex items-center gap-2 bg-stone-50 rounded-lg px-2 py-1 border border-transparent focus-within:bg-white focus-within:border-primary-200">
-                                        <i class="ph-fill ph-link text-stone-300 text-xs"></i>
-                                        <input v-model="loc.link"
-                                            class="flex-1 text-xs font-medium text-stone-600 bg-transparent border-none p-0 focus:ring-0 placeholder:text-stone-300"
-                                            placeholder="輸入地點 或 貼上網址">
+                                <div class="relative z-10 flex flex-col gap-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-2 min-w-0">
+                                            <span class="text-lg shrink-0">
+                                                <span v-if="loc.type==='food'">🍴</span>
+                                                <span v-else-if="loc.type==='shop'">🛍️</span>
+                                                <span v-else-if="loc.type==='transport'">🚇</span>
+                                                <span v-else>📍</span>
+                                            </span>
+                                            <div class="font-bold text-lg text-stone-800 truncate">{{ loc.name || '未命名地點' }}
+                                            </div>
+                                        </div>
+                                        <i class="ph-bold ph-pencil-simple text-stone-300 shrink-0"></i>
                                     </div>
-                                </div>
-
-                                <a v-if="loc.link && (!isLocationsEditing || isUrl(loc.link))"
-                                    :href="getExternalMapLink(loc.link)" target="_blank"
-                                    class="flex items-center justify-center gap-2 w-full py-2 rounded-lg text-xs font-bold transition-all border mt-1"
-                                    :class="isUrl(loc.link) ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-primary-50 text-primary-700 border-primary-100 hover:bg-primary-100'">
-                                    <i
-                                        :class="isUrl(loc.link) ? 'ph-bold ph-globe' : 'ph-bold ph-navigation-arrow'"></i>
-                                    <span>{{ isUrl(loc.link) ? '開啟連結' : '開啟導航' }}</span>
-                                </a>
-
-                                <div v-if="isLocationsEditing">
-                                    <textarea v-model="loc.note" rows="2"
-                                        class="w-full text-xs text-stone-500 bg-transparent border-none p-0 focus:ring-0 placeholder:text-stone-200 resize-none leading-relaxed mt-1"
-                                        placeholder="備註..."></textarea>
-                                </div>
-                                <div v-else-if="loc.note"
-                                    class="text-xs text-stone-500 mt-1 whitespace-pre-wrap leading-relaxed">{{
-                                    loc.note }}
+                                    <a v-if="loc.link" :href="getExternalMapLink(loc.link)" target="_blank" @click.stop
+                                        class="flex items-center justify-center gap-2 w-full py-2 rounded-lg text-xs font-bold transition-all border"
+                                        :class="isUrl(loc.link) ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-primary-50 text-primary-700 border-primary-100 hover:bg-primary-100'">
+                                        <i :class="isUrl(loc.link) ? 'ph-bold ph-globe' : 'ph-bold ph-navigation-arrow'"></i>
+                                        <span>{{ isUrl(loc.link) ? '開啟連結' : '開啟導航' }}</span>
+                                    </a>
+                                    <div v-if="loc.note" class="text-sm text-stone-600 whitespace-pre-wrap leading-relaxed">
+                                        {{ loc.note }}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <button @click="addSavedLocation"
+                    <button @click="openLocModal()"
                         class="w-full py-4 border-2 border-dashed border-stone-300 rounded-2xl text-stone-500 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 transition flex items-center justify-center gap-2 font-bold">
                         <i class="ph-bold ph-plus"></i> 新增地點
                     </button>
@@ -904,32 +798,46 @@
                                 </div>
                             </div>
                             <div class="text-right">
-                                <label class="text-[10px] text-teal-200 block mb-1">匯率設定</label>
-                                <input v-model.number="exchangeRate" type="number" step="0.001" disabled
-                                    class="w-16 text-right text-sm font-bold text-teal-900 bg-white/50 rounded-lg px-2 py-1 shadow-sm outline-none opacity-80 cursor-not-allowed">
+                                <label class="text-[10px] text-teal-200 block mb-1">匯率 1{{ currencyLabel }}≈NT$</label>
+                                <input v-model.number="exchangeRate" @change="updateExchangeRate" type="number"
+                                    step="0.001" inputmode="decimal"
+                                    class="w-16 text-right text-sm font-bold text-teal-900 bg-white/80 focus:bg-white rounded-lg px-2 py-1 shadow-sm outline-none focus:ring-2 focus:ring-white/70">
                             </div>
                         </div>
                     </div>
 
-                    <div class="bg-white p-4 rounded-3xl border border-stone-100 shadow-soft" style="display: none;">
-                        <div class="text-xs font-bold text-stone-500 mb-3 uppercase tracking-wider ml-1">Split Members
+                    <!-- 記帳成員 + 每人小計 -->
+                    <div class="bg-white p-4 rounded-3xl border border-stone-100 shadow-soft space-y-4">
+                        <!-- 成員（可加/刪） -->
+                        <div>
+                            <div class="text-[10px] text-stone-500 mb-2 pl-1 uppercase tracking-wider font-bold">成員</div>
+                            <div v-if="participants.length" class="flex flex-wrap gap-2 mb-2">
+                                <span v-for="p in participants" :key="p"
+                                    class="inline-flex items-center gap-1.5 bg-stone-100 rounded-full pl-3 pr-1.5 py-1.5 text-sm font-bold text-stone-700">
+                                    {{ p }}
+                                    <button @click="removeParticipant(p)"
+                                        class="w-5 h-5 flex items-center justify-center rounded-full text-stone-400 hover:bg-stone-300 hover:text-white transition">
+                                        <i class="ph-bold ph-x text-xs"></i>
+                                    </button>
+                                </span>
+                            </div>
+                            <div class="flex gap-2">
+                                <input v-model="newParticipant" @keyup.enter="addParticipant" placeholder="新增成員名字"
+                                    class="flex-1 bg-stone-50 border-none rounded-xl text-sm font-bold text-stone-700 py-2.5 px-3 focus:ring-2 focus:ring-primary-200">
+                                <button @click="addParticipant"
+                                    class="px-4 bg-primary-500 text-white rounded-xl text-sm font-bold shadow-md shadow-primary-500/30 active:scale-95 transition flex items-center gap-1 shrink-0">
+                                    <i class="ph-bold ph-plus"></i> 加人
+                                </button>
+                            </div>
                         </div>
-                        <div
-                            class="w-full bg-stone-50 rounded-xl px-4 py-3 border border-stone-200 font-medium text-stone-700 cursor-default flex items-center gap-2">
-                            <img src="assets/icn_kitty.png" class="w-7 h-7 object-contain" alt="熊">
-                            <span class="text-stone-300">,</span>
-                            <img src="assets/icn_danial.png" class="w-7 h-7 object-contain" alt="班">
-                        </div>
-                        <div class="grid grid-cols-2 gap-3 mt-4">
+
+                        <!-- 每人各付多少（小計，無正負、無結算） -->
+                        <div v-if="expenses.length" class="grid grid-cols-2 gap-3 border-t border-stone-100 pt-3">
                             <div v-for="p in participants" :key="p"
-                                class="bg-stone-50 p-3 rounded-2xl border border-stone-100 flex items-center justify-between">
-                                <img v-if="p === '熊'" src="assets/icn_kitty.png" style="width:2.5rem;height:2.5rem"
-                                    class="object-contain" :alt="p">
-                                <img v-else-if="p === '班'" src="assets/icn_danial.png"
-                                    style="width:2.5rem;height:2.5rem" class="object-contain" :alt="p">
-                                <span v-else class="text-xs font-bold text-stone-500">{{ p }}</span>
-                                <span class="text-sm font-black text-primary-600">{{ currencySymbol }}{{
-                                    paidByPerson[p]?.toLocaleString() || 0 }}</span>
+                                class="bg-stone-50 p-3 rounded-2xl border border-stone-100 flex items-center justify-between gap-2">
+                                <span class="text-sm font-bold text-stone-600 truncate">{{ p }}</span>
+                                <span class="text-sm font-black text-primary-600 shrink-0">{{ currencySymbol }}{{
+                                    Math.round(paidByPerson[p] || 0).toLocaleString() }}</span>
                             </div>
                         </div>
                     </div>
@@ -937,7 +845,9 @@
                     <div class="bg-white p-4 rounded-3xl border border-stone-100 shadow-sm mb-6">
                         <div class="mb-3">
                             <div class="text-[10px] text-stone-500 mb-1 pl-1">項目</div>
-                            <input v-model="newExpense.item" type="text" placeholder="例如: 午餐、地鐵"
+                            <input ref="itemInputRef" v-model="newExpense.item" type="text" placeholder="例如: 午餐、地鐵"
+                                :class="{'ring-2 ring-red-300 bg-red-50': isItemInvalid}"
+                                @input="isItemInvalid = false"
                                 class="w-full bg-stone-50 border-none rounded-xl text-base font-bold text-stone-700 py-3 px-3 focus:ring-2 focus:ring-primary-200">
                         </div>
                         <div class="flex items-end gap-2">
@@ -964,26 +874,32 @@
                     </div>
 
                     <div class="space-y-3">
-                        <div v-for="(exp, idx) in expenses" :key="idx"
-                            class="flex justify-between items-center bg-white p-4 rounded-2xl border border-stone-100 shadow-sm hover:shadow-md transition-all">
-                            <div class="flex items-center gap-4">
-                                <div
-                                    class="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center border border-primary-100 overflow-hidden">
-                                    <img v-if="exp.payer === '熊'" src="assets/icn_kitty.png"
-                                        style="width:2.5rem;height:2.5rem" class="object-contain" alt="熊">
-                                    <img v-else-if="exp.payer === '班'" src="assets/icn_danial.png"
-                                        style="width:2.5rem;height:2.5rem" class="object-contain" alt="班">
-                                    <span v-else class="text-sm font-black text-primary-600">{{ exp.payer.charAt(0)
-                                        }}</span>
+                        <div v-for="exp in expenses" :key="exp.id || exp.item"
+                            class="bg-white rounded-2xl border border-stone-100 shadow-sm transition-all overflow-hidden">
+                            <!-- 點一下開彈窗編輯 -->
+                            <div @click="openExpModal(exp)"
+                                class="flex justify-between items-center p-4 cursor-pointer active:bg-stone-50">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div
+                                        class="w-10 h-10 rounded-full bg-primary-50 flex items-center justify-center border border-primary-100 overflow-hidden shrink-0">
+                                        <img v-if="exp.payer === '熊'" src="assets/icn_kitty.png"
+                                            style="width:2.5rem;height:2.5rem" class="object-contain" alt="熊">
+                                        <img v-else-if="exp.payer === '班'" src="assets/icn_danial.png"
+                                            style="width:2.5rem;height:2.5rem" class="object-contain" alt="班">
+                                        <span v-else class="text-sm font-black text-primary-600">{{ (exp.payer ||
+                                            '?').charAt(0) }}</span>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="font-bold text-stone-700 truncate">{{ exp.item }}</div>
+                                        <div class="text-xs text-stone-400">{{ exp.payer }}<span v-if="exp.date"> ・ {{
+                                            fmtExpDate(exp.date) }}</span></div>
+                                    </div>
                                 </div>
-                                <div class="font-bold text-stone-700">{{ exp.item }}</div>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <span class="font-mono font-bold text-stone-800 text-lg">{{ currencySymbol }}{{
-                                    exp.amount.toLocaleString() }}</span>
-                                <button @click="removeExpense(idx)"
-                                    class="w-8 h-8 rounded-full text-stone-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition"><i
-                                        class="ph-fill ph-x-circle text-xl"></i></button>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="font-mono font-bold text-stone-800 text-lg">{{ currencySymbol }}{{
+                                        exp.amount.toLocaleString() }}</span>
+                                    <i class="ph-bold ph-pencil-simple text-stone-300"></i>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1001,8 +917,8 @@
                         <!-- 旅遊助理 -->
                         <a href="https://gemini.google.com/gem/fdc6770f6a29?usp=sharing" target="_blank"
                             class="block w-full group cursor-pointer">
-                            <button
-                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden"
+                            <div
+                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden cursor-pointer"
                                 style="border-color: #ff60b5; border-width: 1px;"
                                 onmouseover="this.style.boxShadow='0 10px 15px -3px rgba(255,96,181,0.1)'"
                                 onmouseout="this.style.boxShadow='none'">
@@ -1020,11 +936,11 @@
                                     </div>
                                     <i class="ph-bold ph-caret-right ml-auto text-stone-300" style="color: #ff60b5"></i>
                                 </div>
-                            </button>
+                            </div>
                         </a>
                         <a href="https://translate.google.com/?op=images" target="_blank" class="block w-full group">
-                            <button
-                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden"
+                            <div
+                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden cursor-pointer"
                                 style="border-color: #ff60b5; border-width: 1px;"
                                 onmouseover="this.style.boxShadow='0 10px 15px -3px rgba(255,96,181,0.1)'"
                                 onmouseout="this.style.boxShadow='none'">
@@ -1042,12 +958,12 @@
                                     </div>
                                     <i class="ph-bold ph-caret-right ml-auto text-stone-300" style="color: #ff60b5"></i>
                                 </div>
-                            </button>
+                            </div>
                         </a>
                         <a :href="`https://translate.google.com/?sl=zh-TW&tl=${setup.langCode}&op=translate`"
                             target="_blank" class="block w-full group">
-                            <button
-                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden"
+                            <div
+                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden cursor-pointer"
                                 style="border-color: #ff60b5; border-width: 1px;"
                                 onmouseover="this.style.boxShadow='0 10px 15px -3px rgba(255,96,181,0.1)'"
                                 onmouseout="this.style.boxShadow='none'">
@@ -1067,12 +983,12 @@
                                     </div>
                                     <i class="ph-bold ph-caret-right ml-auto text-stone-300" style="color: #ff60b5"></i>
                                 </div>
-                            </button>
+                            </div>
                         </a>
                         <a :href="`https://translate.google.com/?sl=${setup.langCode}&tl=zh-TW&op=translate`"
                             target="_blank" class="block w-full group">
-                            <button
-                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden"
+                            <div
+                                class="w-full bg-white border border-stone-200 rounded-3xl p-6 transition-all duration-300 relative overflow-hidden cursor-pointer"
                                 style="border-color: #ff60b5; border-width: 1px;"
                                 onmouseover="this.style.boxShadow='0 10px 15px -3px rgba(255,96,181,0.1)'"
                                 onmouseout="this.style.boxShadow='none'">
@@ -1091,12 +1007,44 @@
                                     </div>
                                     <i class="ph-bold ph-caret-right ml-auto text-stone-300" style="color: #ff60b5"></i>
                                 </div>
-                            </button>
+                            </div>
                         </a>
                     </div>
                 </div>
             </transition>
         </main>
+
+        <!-- Bottom Navigation (拇指區) -->
+        <nav class="shrink-0 bg-white/95 backdrop-blur-md border-t border-stone-100 z-30 pb-safe">
+            <div class="flex items-stretch px-2 pt-1.5 gap-1">
+                <button @click="viewMode = 'plan'"
+                    class="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl transition-all active:scale-95"
+                    :class="viewMode === 'plan' ? 'bg-primary-50 text-primary-600' : 'text-stone-400'">
+                    <img src="assets/icn_date.png" style="width:1.9rem;height:1.9rem"
+                        class="object-contain transition-all" :class="viewMode === 'plan' ? '' : 'opacity-40 grayscale'"
+                        alt="行程"><span class="text-[12px] font-bold leading-none">行程</span></button>
+                <button @click="viewMode = 'locations'"
+                    class="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl transition-all active:scale-95"
+                    :class="viewMode === 'locations' ? 'bg-primary-50 text-primary-600' : 'text-stone-400'">
+                    <img src="assets/icn_pocket.png" style="width:1.9rem;height:1.9rem"
+                        class="object-contain transition-all"
+                        :class="viewMode === 'locations' ? '' : 'opacity-40 grayscale'" alt="口袋"><span
+                        class="text-[12px] font-bold leading-none">口袋</span></button>
+                <button @click="viewMode = 'money'"
+                    class="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl transition-all active:scale-95"
+                    :class="viewMode === 'money' ? 'bg-primary-50 text-primary-600' : 'text-stone-400'">
+                    <img src="assets/icn_money.png" style="width:1.9rem;height:1.9rem"
+                        class="object-contain transition-all" :class="viewMode === 'money' ? '' : 'opacity-40 grayscale'"
+                        alt="記帳"><span class="text-[12px] font-bold leading-none">記帳</span></button>
+                <button @click="viewMode = 'translate'"
+                    class="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl transition-all active:scale-95"
+                    :class="viewMode === 'translate' ? 'bg-hello-blue/10 text-hello-blue' : 'text-stone-400'">
+                    <img src="assets/icn_trans.png" style="width:1.9rem;height:1.9rem"
+                        class="object-contain transition-all"
+                        :class="viewMode === 'translate' ? '' : 'opacity-40 grayscale'" alt="小幫手"><span
+                        class="text-[12px] font-bold leading-none">小幫手</span></button>
+            </div>
+        </nav>
 
         <!-- Side Menu -->
         <transition name="fade">
@@ -1178,13 +1126,13 @@
                     </div>
                     <h2 class="text-3xl font-black text-[#562a2e] tracking-tight">{{ isEditing ? '修改旅程' : '開啟新旅程' }}
                     </h2>
-                    <p class="text-sm text-[#b88a8e] font-medium mt-2 tracking-wide">Ready for next adventure?</p>
+                    <p class="text-sm text-[#96686c] font-medium mt-2 tracking-wide">Ready for next adventure?</p>
                 </div>
 
                 <div class="space-y-5">
                     <div class="space-y-2 relative">
                         <label
-                            class="text-xs font-bold text-[#b88a8e] ml-2 uppercase tracking-widest opacity-80">Destination</label>
+                            class="text-xs font-bold text-[#96686c] ml-2 uppercase tracking-widest">Destination</label>
                         <img src="assets/kitty3.png"
                             class="absolute right-0 -top-6 w-12 h-12 object-contain z-10 drop-shadow-sm transform -rotate-12"
                             alt="Kitty">
@@ -1204,7 +1152,7 @@
                     <div class="grid grid-cols-3 gap-4">
                         <div class="col-span-2 space-y-2">
                             <label
-                                class="text-xs font-bold text-[#b88a8e] ml-2 uppercase tracking-widest opacity-80">Start
+                                class="text-xs font-bold text-[#96686c] ml-2 uppercase tracking-widest">Start
                                 Date</label>
                             <div class="relative group">
                                 <input v-model="setup.startDate" type="date"
@@ -1213,7 +1161,7 @@
                         </div>
                         <div class="space-y-2">
                             <label
-                                class="text-xs font-bold text-[#b88a8e] ml-2 uppercase tracking-widest opacity-80">Days</label>
+                                class="text-xs font-bold text-[#96686c] ml-2 uppercase tracking-widest">Days</label>
                             <input v-model.number="setup.days" type="number" min="1" max="30"
                                 class="w-full bg-[#fffcfd] hover:bg-white focus:bg-white border-2 border-[#fff0f5] hover:border-[#ffe4e1] rounded-3xl px-2 py-3.5 text-[#562a2e] font-bold focus:ring-4 focus:ring-[#ff69b4]/10 focus:border-[#ff69b4] transition-all text-center text-xl">
                         </div>
@@ -1222,10 +1170,10 @@
                     <div class="space-y-2">
                         <div class="flex justify-between items-end px-2">
                             <label
-                                class="text-xs font-bold text-[#b88a8e] uppercase tracking-widest opacity-80">Currency</label>
+                                class="text-xs font-bold text-[#96686c] uppercase tracking-widest">Currency</label>
                             <span v-if="isRateLoading"
                                 class="text-[10px] text-[#ff69b4] font-bold animate-pulse">更新中...</span>
-                            <span v-else class="text-[10px] text-[#b88a8e] font-mono opacity-80">1 {{setup.currency}} ≈
+                            <span v-else class="text-[10px] text-[#96686c] font-mono">1 {{setup.currency}} ≈
                                 {{setup.rate}} TWD</span>
                         </div>
                         <div class="flex gap-3">
@@ -1262,15 +1210,16 @@
 
                     <div v-if="tripList.length > 0" class="text-center">
                         <button @click="cancelSetupModal"
-                            class="text-xs font-bold text-[#b88a8e]/60 hover:text-[#b88a8e] py-2 transition-colors">暫不修改，返回</button>
+                            class="text-xs font-bold text-[#96686c] hover:text-[#75484c] py-2 transition-colors">暫不修改，返回</button>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Floating Action Button (User Custom Button) -->
-        <div class="fixed bottom-6 right-6 z-50" v-if="viewMode === 'plan' && !showSetupModal && !showTripMenu">
-            <button @click="addItem"
+        <div class="fixed right-6 z-50" style="bottom: calc(5.5rem + env(safe-area-inset-bottom))"
+            v-if="viewMode === 'plan' && !showSetupModal && !showTripMenu">
+            <button @click="openItemModal()"
                 class="w-14 h-14 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full shadow-glow flex items-center justify-center text-white hover:scale-110 transition-transform active:scale-95 relative group border-4 border-white/50">
                 <!-- Icon -->
                 <i class="ph-bold ph-plus text-2xl drop-shadow-md"></i>
@@ -1282,9 +1231,247 @@
             </button>
         </div>
 
+        <!-- ===== 行程項目編輯彈窗 ===== -->
+        <transition name="sheet">
+            <div v-if="itemModal.show" class="sheet-host absolute inset-x-0 top-0 z-[70] flex items-end justify-center">
+                <div class="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" @click="itemModal.show = false"></div>
+                <div class="sheet-panel relative z-10 w-full bg-white rounded-t-[2rem] shadow-2xl max-h-[85%] overflow-y-auto hide-scroll"
+                    style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+                    <div class="sticky top-0 bg-white/95 backdrop-blur-sm px-5 pt-4 pb-3 border-b border-stone-100 z-10">
+                        <div class="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-3"></div>
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-black text-stone-800">{{ itemModal.mode === 'edit' ? '編輯行程' : '新增行程' }}</h3>
+                            <button @click="itemModal.show = false" aria-label="取消並關閉"
+                                class="w-9 h-9 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center hover:bg-stone-200 transition">
+                                <i class="ph-bold ph-x"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="itemModal.draft" class="p-5 space-y-4">
+                        <div class="grid grid-cols-[7rem_1fr] gap-3 items-start">
+                            <div>
+                                <label class="text-[10px] font-bold text-stone-600 uppercase mb-1 block">時間</label>
+                                <input v-model="itemModal.draft.time" type="time"
+                                    class="w-full h-12 bg-stone-50 border border-stone-200 rounded-xl px-2 text-xl font-bold text-stone-700 focus:outline-none focus:ring-2 focus:ring-primary-100 font-mono text-center appearance-none">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-stone-600 uppercase mb-1 block">類型</label>
+                                <div class="flex h-12 bg-stone-50 p-1 rounded-xl border border-stone-200 items-stretch">
+                                    <button v-for="type in ['spot', 'food', 'shop', 'transport']" :key="type"
+                                        @click="itemModal.draft.type = type"
+                                        class="flex-1 rounded-lg flex items-center justify-center text-xl transition-colors"
+                                        :class="itemModal.draft.type === type ? 'bg-white shadow-sm scale-100' : 'opacity-40 hover:opacity-100'">
+                                        <span v-if="type==='spot'">📍</span>
+                                        <span v-else-if="type==='food'">🍴</span>
+                                        <span v-else-if="type==='shop'">🛍️</span>
+                                        <span v-else-if="type==='transport'">🚇</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <input v-model="itemModal.draft.activity"
+                            class="js-item-activity w-full text-lg font-bold text-stone-800 placeholder:text-stone-300 border-b-2 border-stone-100 focus:border-primary-400 bg-transparent py-1 focus:outline-none transition-colors"
+                            placeholder="行程名稱...">
+
+                        <div
+                            class="flex items-center gap-2 bg-stone-50 rounded-xl px-3 py-2 border border-stone-100 focus-within:border-primary-200 focus-within:bg-white transition-colors">
+                            <i class="ph-bold ph-map-pin text-stone-500 shrink-0"></i>
+                            <div class="flex-1 min-w-0 flex flex-col">
+                                <input v-model="itemModal.draft.location"
+                                    class="text-sm font-medium bg-transparent focus:outline-none text-stone-700 w-full truncate"
+                                    placeholder="地點名稱">
+                                <input v-model="itemModal.draft.link"
+                                    class="text-[10px] text-stone-500 bg-transparent focus:outline-none w-full truncate font-mono"
+                                    placeholder="http://地圖連結...">
+                            </div>
+                        </div>
+
+                        <div class="relative">
+                            <i class="ph-bold ph-notebook absolute top-2.5 left-3 text-stone-300"></i>
+                            <textarea v-model="itemModal.draft.note"
+                                class="w-full bg-stone-50 rounded-xl py-2 pl-9 pr-3 text-sm text-stone-600 focus:outline-none focus:ring-2 focus:ring-primary-100 resize-none min-h-[60px]"
+                                placeholder="備註 (票卷/訂位編號...)"></textarea>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-2 border-t border-stone-50">
+                            <button v-if="itemModal.mode === 'edit'" @click="deleteItemFromModal"
+                                class="text-red-400 hover:text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                                <i class="ph-bold ph-trash"></i> 刪除
+                            </button>
+                            <span v-else></span>
+                            <button @click="saveItemModal"
+                                class="bg-primary-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-primary-200 hover:bg-primary-700 transition active:scale-95 flex items-center gap-2">
+                                <i class="ph-bold ph-check"></i> {{ itemModal.mode === 'edit' ? '儲存' : '新增' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- ===== 口袋名單編輯彈窗 ===== -->
+        <transition name="sheet">
+            <div v-if="locModal.show" class="sheet-host absolute inset-x-0 top-0 z-[70] flex items-end justify-center">
+                <div class="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" @click="locModal.show = false"></div>
+                <div class="sheet-panel relative z-10 w-full bg-white rounded-t-[2rem] shadow-2xl max-h-[85%] overflow-y-auto hide-scroll"
+                    style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+                    <div class="sticky top-0 bg-white/95 backdrop-blur-sm px-5 pt-4 pb-3 border-b border-stone-100 z-10">
+                        <div class="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-3"></div>
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-black text-stone-800">{{ locModal.mode === 'edit' ? '編輯地點' : '新增地點' }}</h3>
+                            <button @click="locModal.show = false" aria-label="取消並關閉"
+                                class="w-9 h-9 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center hover:bg-stone-200 transition">
+                                <i class="ph-bold ph-x"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="locModal.draft" class="p-5 space-y-4">
+                        <input v-model="locModal.draft.name"
+                            class="js-loc-name w-full font-bold text-lg text-stone-800 bg-stone-50 rounded-xl px-3 py-2.5 border-none focus:ring-2 focus:ring-primary-200 placeholder:text-stone-300"
+                            placeholder="地點名稱">
+                        <div>
+                            <label class="text-[10px] font-bold text-stone-600 uppercase mb-1 block">類型</label>
+                            <div class="flex h-12 bg-stone-50 p-1 rounded-xl border border-stone-200 items-stretch">
+                                <button v-for="type in ['spot', 'food', 'shop', 'transport']" :key="type"
+                                    @click="locModal.draft.type = type"
+                                    class="flex-1 rounded-lg flex items-center justify-center text-xl transition-colors"
+                                    :class="locModal.draft.type === type ? 'bg-white shadow-sm scale-100' : 'opacity-40 hover:opacity-100'">
+                                    <span v-if="type==='spot'">📍</span>
+                                    <span v-else-if="type==='food'">🍴</span>
+                                    <span v-else-if="type==='shop'">🛍️</span>
+                                    <span v-else-if="type==='transport'">🚇</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div
+                            class="flex items-center gap-2 bg-stone-50 rounded-xl px-3 py-2.5 border border-transparent focus-within:border-primary-200">
+                            <i class="ph-fill ph-link text-stone-300 text-sm"></i>
+                            <input v-model="locModal.draft.link"
+                                class="flex-1 text-sm font-medium text-stone-600 bg-transparent border-none p-0 focus:ring-0 placeholder:text-stone-300"
+                                placeholder="輸入地點 或 貼上網址">
+                        </div>
+                        <textarea v-model="locModal.draft.note" rows="2"
+                            class="w-full text-sm text-stone-500 bg-stone-50 rounded-xl px-3 py-2.5 border-none focus:ring-2 focus:ring-primary-100 placeholder:text-stone-300 resize-none leading-relaxed"
+                            placeholder="備註..."></textarea>
+
+                        <div class="flex items-center justify-between pt-2 border-t border-stone-50">
+                            <button v-if="locModal.mode === 'edit'" @click="deleteLocFromModal"
+                                class="text-red-400 hover:text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                                <i class="ph-bold ph-trash"></i> 刪除
+                            </button>
+                            <span v-else></span>
+                            <button @click="saveLocModal"
+                                class="bg-primary-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-primary-200 hover:bg-primary-700 transition active:scale-95 flex items-center gap-2">
+                                <i class="ph-bold ph-check"></i> {{ locModal.mode === 'edit' ? '儲存' : '新增' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- ===== 支出編輯彈窗 ===== -->
+        <transition name="sheet">
+            <div v-if="expModal.show" class="sheet-host absolute inset-x-0 top-0 z-[70] flex items-end justify-center">
+                <div class="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" @click="expModal.show = false"></div>
+                <div class="sheet-panel relative z-10 w-full bg-white rounded-t-[2rem] shadow-2xl max-h-[85%] overflow-y-auto hide-scroll"
+                    style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+                    <div class="sticky top-0 bg-white/95 backdrop-blur-sm px-5 pt-4 pb-3 border-b border-stone-100 z-10">
+                        <div class="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-3"></div>
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-black text-stone-800">編輯支出</h3>
+                            <button @click="expModal.show = false" aria-label="取消並關閉"
+                                class="w-9 h-9 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center hover:bg-stone-200 transition">
+                                <i class="ph-bold ph-x"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="expModal.draft" class="p-5 space-y-4">
+                        <input v-model="expModal.draft.item" placeholder="項目"
+                            class="w-full bg-stone-50 border-none rounded-xl text-base font-bold text-stone-700 py-2.5 px-3 focus:ring-2 focus:ring-primary-200">
+                        <div class="flex gap-2">
+                            <select v-model="expModal.draft.payer"
+                                class="w-24 shrink-0 bg-stone-50 border-none rounded-xl text-sm font-bold text-stone-700 py-2.5 px-2 focus:ring-2 focus:ring-primary-200 appearance-none">
+                                <option v-for="p in participants" :value="p">{{ p }}</option>
+                            </select>
+                            <input v-model.number="expModal.draft.amount" type="number" inputmode="decimal"
+                                :placeholder="currencySymbol"
+                                class="flex-1 bg-stone-50 border-none rounded-xl text-base font-black text-stone-700 py-2.5 px-3 focus:ring-2 focus:ring-primary-200 text-right font-mono">
+                        </div>
+                        <input v-model="expModal.draft.date" type="date"
+                            class="w-full bg-stone-50 border-none rounded-xl text-sm text-stone-600 py-2.5 px-3 focus:ring-2 focus:ring-primary-200">
+
+                        <div class="flex items-center justify-between pt-2 border-t border-stone-50">
+                            <button @click="deleteExpFromModal"
+                                class="text-red-400 hover:text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                                <i class="ph-bold ph-trash"></i> 刪除
+                            </button>
+                            <button @click="saveExpModal"
+                                class="bg-primary-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-md shadow-primary-200 hover:bg-primary-700 transition active:scale-95 flex items-center gap-2">
+                                <i class="ph-bold ph-check"></i> 儲存
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- ===== App 內確認 Sheet（取代原生 confirm）===== -->
+        <transition name="sheet">
+            <div v-if="dialog.show" class="sheet-host absolute inset-x-0 top-0 z-[80] flex items-end justify-center">
+                <div class="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" @click="dialogAnswer(false)"></div>
+                <div class="sheet-panel relative z-10 w-full bg-white rounded-t-[2rem] shadow-2xl px-6 pt-4"
+                    style="padding-bottom: calc(1.5rem + env(safe-area-inset-bottom))">
+                    <div class="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4"></div>
+                    <h3 v-if="dialog.title" class="text-lg font-black text-stone-800 mb-2">{{ dialog.title }}</h3>
+                    <p class="text-sm text-stone-600 leading-relaxed">{{ dialog.message }}</p>
+                    <input v-if="dialog.link" readonly :value="dialog.link" @focus="$event.target.select()"
+                        class="w-full mt-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-600 py-2.5 px-3 font-mono focus:ring-2 focus:ring-primary-200">
+                    <div class="flex gap-3 mt-6">
+                        <button v-if="dialog.showCancel" @click="dialogAnswer(false)"
+                            class="flex-1 py-3.5 rounded-2xl bg-stone-100 text-stone-600 font-bold active:scale-[0.98] transition">{{ dialog.cancelText }}</button>
+                        <button @click="dialogAnswer(true)"
+                            class="flex-1 py-3.5 rounded-2xl font-bold text-white shadow-md active:scale-[0.98] transition"
+                            :class="dialog.danger ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-primary-500 hover:bg-primary-600 shadow-primary-200'">{{ dialog.confirmText }}</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <!-- ===== Toast（含刪除復原）===== -->
+        <div class="absolute inset-x-0 z-[90] flex justify-center pointer-events-none px-4"
+            style="bottom: calc(5.5rem + env(safe-area-inset-bottom))">
+            <transition name="toast">
+                <div v-if="toast.show"
+                    class="pointer-events-auto bg-stone-800/95 text-white rounded-full pl-4 pr-2 py-2 shadow-xl flex items-center gap-2 max-w-full">
+                    <i v-if="toast.icon" :class="toast.icon" class="text-primary-200 shrink-0"></i>
+                    <span class="text-sm font-bold truncate py-1">{{ toast.message }}</span>
+                    <button v-if="toast.hasUndo" @click="undoToast"
+                        class="shrink-0 bg-white/15 hover:bg-white/25 text-white text-sm font-bold px-3 py-1.5 rounded-full transition">復原</button>
+                    <span v-else class="pr-2"></span>
+                </div>
+            </transition>
+        </div>
+
     </div><!-- /app -->
 
     <script>
+        // 顯示「有新版本」提示，讓使用者自選時機更新，不強制中斷（取代原本三處強制 reload）
+        let __updateBannerShown = false;
+        function __showUpdateBanner() {
+            if (__updateBannerShown) return;
+            __updateBannerShown = true;
+            const b = document.createElement('div');
+            b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(6rem + env(safe-area-inset-bottom));z-index:60;background:#2c3e50;color:#fff;padding:10px 18px;border-radius:9999px;font-size:14px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,0.22);cursor:pointer;display:flex;align-items:center;gap:10px;';
+            b.innerHTML = '<span>有新版本 ✨</span><span style="text-decoration:underline;">點此更新</span>';
+            b.onclick = () => location.reload();
+            document.body.appendChild(b);
+        }
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js').then(registration => {
@@ -1296,8 +1483,7 @@
                         installingWorker.onstatechange = () => {
                             if (installingWorker.state === 'installed') {
                                 if (navigator.serviceWorker.controller) {
-                                    console.log('New content available, reloading...');
-                                    window.location.reload();
+                                    __showUpdateBanner();
                                 } else {
                                     console.log('Content cached for offline use.');
                                 }
@@ -1321,19 +1507,15 @@
                     console.log('SW registration failed: ', registrationError);
                 });
 
-                // 監聽 controller 變更（新 SW 接管時觸發）
-                let refreshing;
+                // 新 SW 接管時 → 顯示提示，不強制重整
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    if (refreshing) return;
-                    window.location.reload();
-                    refreshing = true;
+                    __showUpdateBanner();
                 });
 
                 // 監聽 SW 主動發送的更新通知
                 navigator.serviceWorker.addEventListener('message', (event) => {
                     if (event.data && event.data.type === 'SW_UPDATED') {
-                        console.log('SW sent update notification, reloading...');
-                        window.location.reload();
+                        __showUpdateBanner();
                     }
                 });
             });
@@ -1341,7 +1523,22 @@
     </script>
 
 
-    <script type="module" src="./app.js?v=20"></script>
+    <script>
+        // 鍵盤彈出時把「可視視口底部」寫進 --vvh（iOS 鍵盤不縮排版視口，貼底 sheet 會被蓋住）
+        // .sheet-host 以此變數定高，彈窗底部自動貼鍵盤上緣
+        (function () {
+            const vv = window.visualViewport;
+            if (!vv) return;
+            const update = () => {
+                document.documentElement.style.setProperty('--vvh', Math.round(vv.height + vv.offsetTop) + 'px');
+            };
+            vv.addEventListener('resize', update);
+            vv.addEventListener('scroll', update);
+            update();
+        })();
+    </script>
+
+    <script type="module" src="./app.js?v=27"></script>
 
     <script>
         setTimeout(() => {
