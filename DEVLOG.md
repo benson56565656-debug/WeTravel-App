@@ -12,6 +12,11 @@
 
 ---
 
+## 2026-07-18（零基礎保姆級自架教學 `docs/SETUP.md` ✅）
+- Benson 拍板：受眾＝零基礎網友（從註冊 Google/GitHub 帳號教起）、載體＝獨立 docs/SETUP.md（README 精簡版保留＋開頭導流一行）。
+- 內容八章：開始之前／註冊帳號／Fork／Firebase（建專案+匿名登入+Firestore+規則）／填設定（GitHub 網頁鉛筆編輯，零指令）／GitHub Pages 上線／開始使用（含 PWA 安裝）／排錯 Q&A＋附錄（免費額度、隱私、Sync fork 更新、換素材連 ASSETS.md）。
+- 寫作原則：每步「看到什麼→點什麼→應出現什麼」三段式；errorMap 錯誤文案（尚未設定 Firebase／存取被拒絕）與排錯 Q 對齊；rules/config 引用路徑已核實。
+
 ## 2026-07-18（同步上游：echo 修復＋「所有旅程」＋封存制 ✅ v41）
 - 上游真機驗收通過（至 9ec957a／sw v41）後同步，三檔整檔覆蓋（index.html／sw.js／app.js），app.js 覆蓋後重做去敏化三件套（vue pin 3.5.13、config 改 import './firebase-config.js'、errorMap not-configured＋onMounted 守衛）。
 - 內容：①**echo 資料遺失修復**——onSnapshot handler 本地有待存變更即跳過遠端快照（`if (timeout) return`）＋debouncedSave 進入存檔即 `timeout = null`，自己存檔的 ACK 不再吃掉 debounce 窗內新變更；②**「所有旅程」區塊**——旅程抽屜下方一次列出 Firestore 全部旅程（首開 getDocs、session 快取、手動重新整理），點卡加入我的清單；③**封存制**——「刪除旅程」全面改封存（`archived:true` merge，無真刪路徑），即點即封存＋undo toast，所有旅程卡片可直接封存，「已封存 (N)」收合列可取回；④全新用戶 setup modal 有「先看看現有旅程」入口。
