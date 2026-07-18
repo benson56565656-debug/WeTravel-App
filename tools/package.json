@@ -1,0 +1,14 @@
+{
+  "name": "wetravel-asset-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WeTravel 素材替換工具包（就地覆蓋制）",
+  "scripts": {
+    "check": "node check.mjs",
+    "test": "node spec.test.mjs && node check.test.mjs && node replace.test.mjs"
+  },
+  "dependencies": {
+    "sharp": "0.35.3"
+  }
+}

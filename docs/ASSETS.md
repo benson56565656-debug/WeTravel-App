@@ -1,0 +1,63 @@
+# WeTravel 素材對照表
+
+本檔與 `tools/assets-spec.mjs` 同源（機器可讀版在後者）。要換整套視覺、或確認每張圖的尺寸，
+看這張表就好。素材維持原檔名就地覆蓋，app 程式碼不需改動。
+
+## 怎麼換一張圖
+
+```bash
+cd tools && npm install          # 第一次才要
+node replace.mjs <檔名> <你的新圖路徑>
+```
+
+`replace.mjs` 會自動把新圖 cover 縮放到規格尺寸、以 `palette:false` PNG 覆蓋原檔，並自動
+bump `sw.js` 快取版本（PWA 才抓得到新圖）。長寬比或透明通道不符會警告但仍執行。
+
+換完跑一次驗收：
+
+```bash
+node check.mjs                   # 逐張比對規格，全綠才算過
+```
+
+## PWA 圖示（特例）
+
+```bash
+node replace.mjs icon <你的方形新圖>   # 一次產出 icon-192.png + icon-512.png（根目錄）
+```
+
+## 對照表
+
+尺寸＝現行素材實測值（新圖會被對齊到同一 footprint，app 顯示區固定）。
+「透明」= 需帶透明背景；「任意」= 不檢查。
+
+| 檔名 | 用途 | 尺寸 | 透明 | 大小上限 |
+|---|---|---|---|---|
+| BG_Loading.png | 啟動畫面滿版背景 | 1059x1920 | 任意 | 1.5MB |
+| kitty_face_classic.png | 「今日主題」卡片主視覺 | 512x412 | 需 | 250KB |
+| kitty_face_pink.png | 全站浮水印＋行程卡片背景 | 512x227 | 需 | 250KB |
+| kitty_money.png | 記帳頁總額卡片背景 | 720x410 | 需 | 200KB |
+| kitty1.png | 口袋名單卡片背景 | 360x238 | 需 | 100KB |
+| kitty_pilot.png | 側邊選單「目前旅程」卡片 | 270x113 | 需 | 100KB |
+| kitty3.png | 設定視窗 Destination 旁 | 144x144 | 需 | 50KB |
+| bow_pink.png | 蝴蝶結裝飾（口袋標題／新增行程鈕） | 96x83 | 需 | 30KB |
+| bow_red.png | 蝴蝶結裝飾（logo／清單標題） | 96x96 | 需 | 30KB |
+| icn_date.png | 底部導覽「行程」 | 96x96 | 需 | 30KB |
+| icn_pocket.png | 底部導覽「口袋」 | 96x96 | 需 | 30KB |
+| icn_money.png | 底部導覽「記帳」 | 96x96 | 需 | 30KB |
+| icn_trans.png | 底部導覽「小幫手」 | 96x96 | 需 | 30KB |
+| icn_home.png | 頂部選單按鈕 | 108x108 | 需 | 30KB |
+| icn_share.png | 頂部分享按鈕 | 144x144 | 需 | 50KB |
+| icn_head.png | 小幫手頁頭像 | 240x240 | 需 | 100KB |
+| icn_agent.png | 小幫手「旅遊助理」卡片 | 96x96 | 需 | 30KB |
+| icn_camera.png | 小幫手「拍照翻譯」卡片 | 96x96 | 需 | 30KB |
+| icn_speak.png | 小幫手「中文→外語」卡片 | 96x96 | 需 | 30KB |
+| icn_listen.png | 小幫手「外語→中文」卡片 | 96x96 | 需 | 30KB |
+| icn_danial.png | 記帳付款人頭像 1 | 120x120 | 需 | 50KB |
+| icn_kitty.png | 記帳付款人頭像 2 | 120x120 | 需 | 50KB |
+| icon-192.png | PWA icon／favicon | 192x192 | 任意 | 60KB |
+| icon-512.png | PWA icon | 512x512 | 任意 | 250KB |
+
+## 已知缺口
+
+清單分頁的底部導覽沒有 PNG 圖檔——用 Phosphor 字型圖示（`ph-suitcase-rolling`），與其他 4 顆
+不一致。做整套中性素材時再一起補一顆 `nav-checklist`。

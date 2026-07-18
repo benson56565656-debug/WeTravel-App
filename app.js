@@ -288,10 +288,12 @@ createApp({
             }, 400);
         });
         const resetChecklist = async () => {
-            const ok = await appConfirm('所有成員的勾選都會清空，項目保留。', { title: '重設勾選', danger: true, confirmText: '全部重設' });
+            const m = activeChecklistMember.value;
+            const who = memberLabel(m) ? `${memberLabel(m)} 的` : '你的';
+            const ok = await appConfirm(`只會清空${who}勾選，項目保留，其他成員不受影響。`, { title: '重設勾選', danger: true, confirmText: '重設' });
             if (!ok) return;
-            checklist.value.forEach(i => { i.checkedBy = {}; });
-            showToast('已重設所有勾選');
+            checklist.value.forEach(i => { if (i.checkedBy) delete i.checkedBy[m]; });
+            showToast(`已重設${who}勾選`);
         };
 
         // 清單項目彈窗（draft 制，同行程/口袋/支出）

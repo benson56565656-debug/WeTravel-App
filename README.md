@@ -62,6 +62,21 @@ python3 -m http.server 8000
 
 **資料模型**：所有行程存於 Firestore `trips/{tripId}`；行程清單索引存在瀏覽器 localStorage。協作模型為「知道連結即可共編」——請只把分享連結給你信任的旅伴。
 
+## 🎨 更換素材（把預設圖換成你自己的）
+
+所有 UI 圖片（splash、吉祥物、導覽列圖示、頭像、PWA icon…共 24 檔）都可以直接替換，**不用改任何程式碼**：
+
+1. 查 [`docs/ASSETS.md`](./docs/ASSETS.md) 對照表，找到你要換的檔名與建議尺寸
+2. 執行替換工具（自動裁切壓縮成規格、自動 bump Service Worker 版本）：
+   ```bash
+   cd tools && npm install
+   node replace.mjs <檔名> <你的新圖路徑>   # 例：node replace.mjs bow_pink.png ~/my-logo.png
+   node replace.mjs icon <你的新圖路徑>     # PWA icon 特例，一次產出 192/512 兩檔
+   ```
+3. 全量驗收：`node check.mjs`（24 檔規格全綠即可部署）
+
+> 注意：預設素材含 Hello Kitty／Sanrio 圖像，僅供個人自用示範；公開部署請務必換成你自己的素材。
+
 ## 📱 安裝到手機 (PWA)
 1. 手機瀏覽器開啟你部署的網址
 2. iOS Safari：分享 → 「加入主畫面」；Android Chrome：選單 → 「安裝應用程式」
