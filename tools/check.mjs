@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { ASSETS, ICONS } from './assets-spec.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,7 +26,7 @@ function pngInfo(buf) {
   return { w, h, alpha };
 }
 
-export function checkAll(root) {
+export async function checkAll(root) {
   const specs = [
     ...ASSETS.map((s) => ({ ...s, dir: 'assets' })),
     ...ICONS.map((s) => ({ ...s, dir: '.' })),
@@ -38,7 +39,15 @@ export function checkAll(root) {
       const buf = readFileSync(p);
       const { w, h, alpha } = pngInfo(buf);
       if (w !== s.w || h !== s.h) problems.push(`尺寸 ${w}x${h}，應為 ${s.w}x${s.h}`);
-      if (s.alpha && !alpha) problems.push('需透明背景但無 alpha 通道');
+      if (s.alpha) {
+        // header 只看得出「有沒有 alpha 通道」；全不透明的 RGBA（照片／截圖的常態）
+        // 會矇混過關並在 app 裡變成實心方塊，所以再解一次像素確認真有透明處。
+        if (!alpha) {
+          problems.push('需透明背景但無 alpha 通道');
+        } else if ((await sharp(buf).stats()).isOpaque) {
+          problems.push('需透明背景但整張不透明（有 alpha 通道卻無透明像素）');
+        }
+      }
       if (buf.length > s.maxBytes) {
         problems.push(`${(buf.length / 1024).toFixed(0)}KB 超過上限 ${(s.maxBytes / 1024).toFixed(0)}KB`);
       }
@@ -63,7 +72,7 @@ export function checkAll(root) {
 
 // CLI
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { results, orphans } = checkAll(REPO_ROOT);
+  const { results, orphans } = await checkAll(REPO_ROOT);
   for (const r of results) {
     console.log(r.ok ? `✓ ${r.file}` : `✗ ${r.file} — ${r.problems.join('；')}`);
   }

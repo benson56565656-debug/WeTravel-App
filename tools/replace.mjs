@@ -1,6 +1,6 @@
 // tools/replace.mjs
 import sharp from 'sharp';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REPLACEABLE, ICONS } from './assets-spec.mjs';
@@ -16,13 +16,38 @@ export async function encodeToSpec(srcPath, spec) {
   if (Math.abs(srcAR - dstAR) / dstAR > 0.05) {
     warnings.push(`來源長寬比 ${srcAR.toFixed(2)} ≠ 目標 ${dstAR.toFixed(2)}，將置中裁切（cover）`);
   }
-  if (spec.alpha && !meta.hasAlpha) {
-    warnings.push('規格需透明背景，但來源無 alpha 通道');
+  if (spec.alpha) {
+    // 只看 hasAlpha 會漏：一般照片／截圖多半是 RGBA 但 alpha 全 255，
+    // 換進來 app 裡就是一塊實心方形。用 stats().isOpaque 驗有沒有真的透明像素。
+    if (!meta.hasAlpha) {
+      warnings.push('規格需透明背景，但來源無 alpha 通道');
+    } else if ((await sharp(srcPath).stats()).isOpaque) {
+      warnings.push('規格需透明背景，但來源整張不透明（有 alpha 通道卻無透明像素）');
+    }
   }
-  const buf = await sharp(srcPath)
-    .resize(spec.w, spec.h, { fit: 'cover', position: 'centre' })
+  const base = sharp(srcPath).resize(spec.w, spec.h, { fit: 'cover', position: 'centre' });
+  let buf = await base
+    .clone()
     .png({ palette: false, compressionLevel: 9 }) // 明講關 palette：sharp 0.35 隱性規則
     .toBuffer();
+  if (buf.length > spec.maxBytes) {
+    // 照片類來源存全彩 PNG 常直接爆上限（BG_Loading 實測 4988KB/1536KB）。
+    // 自動降級 palette 量化（tRNS 保透明，check 端認得 colorType 3），
+    // 由高到低試品質，壓進上限就收；全試完仍超標才維持警告、寫最小的那版。
+    for (const quality of [90, 70, 50]) {
+      const candidate = await base
+        .clone()
+        .png({ palette: true, quality, compressionLevel: 9 })
+        .toBuffer();
+      if (candidate.length < buf.length) buf = candidate;
+      if (candidate.length <= spec.maxBytes) {
+        warnings.push(
+          `全彩 PNG 過大，已自動壓縮（palette 量化 q${quality}）→ ${(candidate.length / 1024).toFixed(0)}KB`,
+        );
+        break;
+      }
+    }
+  }
   if (buf.length > spec.maxBytes) {
     warnings.push(`輸出 ${(buf.length / 1024).toFixed(0)}KB 超過上限 ${(spec.maxBytes / 1024).toFixed(0)}KB`);
   }
@@ -61,6 +86,12 @@ async function main() {
   const [target, src] = process.argv.slice(2);
   if (!target || !src) {
     console.error('用法：node tools/replace.mjs <目標檔名|icon> <新圖路徑>');
+    process.exit(1);
+  }
+  if (!existsSync(src)) {
+    console.error(`✗ 找不到來源圖：${src}`);
+    console.error('  提示：Windows 檔案總管預設隱藏副檔名，實際檔名可能是 xxx.jpg／xxx.png——');
+    console.error('  補上副檔名，或把檔案直接拖進終端機視窗讓路徑自動帶入。');
     process.exit(1);
   }
   if (target === 'icon') {
