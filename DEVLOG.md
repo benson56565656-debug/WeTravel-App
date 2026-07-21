@@ -12,6 +12,10 @@
 
 ---
 
+## 2026-07-21（還原素材上傳測試 ✅——維持「素材不換」定案）
+- Benson 真機測試上游 GUI 工具的「上線更新」流程時，把 5 張測試圖＋sw.js 拖上了本 repo（`8d4aa96`）——流程驗證成功，但測試圖蓋掉 Sanrio 素材與檔頭素材政策不符。
+- Benson 拍板：revert 還原原素材（`git revert 8d4aa96`，5 圖＋sw 版本全部復原）；GitHub Pages 維持不開（本 repo 是程式碼鏡像，非 hosted demo）。
+
 ## 2026-07-18（零基礎保姆級自架教學 `docs/SETUP.md` ✅）
 - Benson 拍板：受眾＝零基礎網友（從註冊 Google/GitHub 帳號教起）、載體＝獨立 docs/SETUP.md（README 精簡版保留＋開頭導流一行）。
 - 內容八章：開始之前／註冊帳號／Fork／Firebase（建專案+匿名登入+Firestore+規則）／填設定（GitHub 網頁鉛筆編輯，零指令）／GitHub Pages 上線／開始使用（含 PWA 安裝）／排錯 Q&A＋附錄（免費額度、隱私、Sync fork 更新、換素材連 ASSETS.md）。
