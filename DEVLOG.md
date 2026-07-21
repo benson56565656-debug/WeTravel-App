@@ -12,6 +12,10 @@
 
 ---
 
+## 2026-07-21（oss 說明頁 GitHub Pages 已啟用並驗證 ✅）
+- `gh api repos/benson5566/WeTravel-App/pages` 開啟 main `/docs` 來源；curl 驗證 `https://benson5566.github.io/WeTravel-App/` 與其 `SETUP.md` 皆 200 且內容正確。
+- 至此本輪 spec（`2026-07-21-setup-guide-page-design.md`）四項交付全部完成：`docs/index.html`／README 導流／GitHub Pages／DEVLOG。
+
 ## 2026-07-21（oss 說明頁上線 ✅——docs/index.html 忠實網頁化 SETUP.md）
 - 新增 `docs/index.html`：單檔（inline CSS+JS）markdown 渲染殼，fetch 同資料夾 `SETUP.md` 瀏覽器端渲染，SETUP.md 本身不動＝唯一真相源。渲染器自寫極簡版（先 escape 再套格式，涵蓋標題/粗體/行內 code/圍欄程式碼/引用/清單/連結/分隔線語法子集），零第三方程式碼、零外部請求。
 - 頁面功能：側欄目錄（桌面 sticky／手機收合）＋ IntersectionObserver 捲動高亮目前章節、程式碼區塊複製鈕、fetch 失敗時顯示中文提示＋導向 GitHub 讀 SETUP.md 的連結（不留白頁）。視覺沿用 gui.html 品牌感（`--pink #e8467c`／`--bg #fff7f9`／system-ui 字體堆疊）。
