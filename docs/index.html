@@ -57,14 +57,38 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function isSafeUrl(url) {
+  const scheme = url.match(/^([a-z][a-z0-9+.-]*):/i);
+  return !scheme || /^https?$|^mailto$/i.test(scheme[1]);
+}
+
 function renderInline(s) {
   let out = s.replace(/`([^`]+)`/g, (_, code) => '<code>' + code + '</code>');
   out = out.replace(/\*\*([^*]+)\*\*/g, (_, b) => '<strong>' + b + '</strong>');
   out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
     const external = /^https?:\/\//.test(url);
-    return '<a href="' + url + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + text + '</a>';
+    const href = isSafeUrl(url) ? url : '#';
+    return '<a href="' + href + '"' + (external ? ' target="_blank" rel="noopener"' : '') + '>' + text + '</a>';
   });
   return out;
+}
+
+function consumeListItems(lines, start, markerRe) {
+  const html = [];
+  let i = start;
+  while (i < lines.length) {
+    if (markerRe.test(lines[i])) {
+      html.push('<li>' + renderInline(lines[i].replace(markerRe, '')) + '</li>');
+      i++;
+    } else if (/^\s+-\s+/.test(lines[i]) && html.length > 0) {
+      const nested = consumeListItems(lines, i, /^\s+-\s+/);
+      html[html.length - 1] = html[html.length - 1].replace(/<\/li>$/, '<ul>' + nested.html.join('') + '</ul></li>');
+      i = nested.next;
+    } else {
+      break;
+    }
+  }
+  return { html, next: i };
 }
 
 function renderMarkdown(md) {
@@ -113,22 +137,16 @@ function renderMarkdown(md) {
     }
 
     if (/^-\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^-\s+/.test(lines[i])) {
-        items.push('<li>' + renderInline(lines[i].replace(/^-\s+/, '')) + '</li>');
-        i++;
-      }
-      out.push('<ul>' + items.join('') + '</ul>');
+      const items = consumeListItems(lines, i, /^-\s+/);
+      i = items.next;
+      out.push('<ul>' + items.html.join('') + '</ul>');
       continue;
     }
 
     if (/^\d+\.\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
-        items.push('<li>' + renderInline(lines[i].replace(/^\d+\.\s+/, '')) + '</li>');
-        i++;
-      }
-      out.push('<ol>' + items.join('') + '</ol>');
+      const items = consumeListItems(lines, i, /^\d+\.\s+/);
+      i = items.next;
+      out.push('<ol>' + items.html.join('') + '</ol>');
       continue;
     }
 

@@ -89,3 +89,17 @@ assert.equal(
 );
 
 console.log('docs-render.test.mjs (Task 2): all assertions passed ✓');
+
+// 最終審查修復①：縮排子清單（真實 SETUP.md 有此情形）——巢狀進上層 <li>，且不中斷父清單編號
+assert.equal(
+  renderMarkdown('1. 項目一\n   - 子項一\n   - 子項二\n2. 項目二').trim(),
+  '<ol><li>項目一<ul><li>子項一</li><li>子項二</li></ul></li><li>項目二</li></ol>'
+);
+
+// 最終審查修復②：連結網址協定白名單——非 http(s)/mailto 一律導向安全的 "#"
+assert.equal(
+  renderMarkdown('[點我](javascript:alert%281%29)').trim(),
+  '<p><a href="#">點我</a></p>'
+);
+
+console.log('docs-render.test.mjs (final-review fixes): all assertions passed ✓');
