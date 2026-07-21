@@ -12,6 +12,10 @@
 
 ---
 
+## 2026-07-21（資安盤點→firestore.rules 補 deny delete ✅）
+- 全面資安盤點（兩 repo 工作樹＋git 全歷史＋作者資訊＋XSS/SRI 檢查）後唯一實質補強：規則層 `write` 原本隱含允許 delete，但 App 已是封存制、無正當刪除路徑——改為 `allow read, create, update` ＋ `allow delete: if false`，防止繞過 App 直接 deleteDoc 毀損資料。App 行為零影響（setDoc merge＝create/update、REST PATCH＝update）。
+- 自架用戶升級方式：Firebase Console → Firestore → 規則 → 貼上新版 → 發布。
+
 ## 2026-07-21（同步上游：素材替換 GUI＋「🚀 上線更新」鈕＋Windows 雙擊入口 ✅）
 - 上游 GUI 輪真機驗收通過後同步。新增：`tools/gui.mjs`（本機伺服器，只綁 127.0.0.1）＋`tools/gui.html`（素材牆＋裁切/旋轉編輯＋還原＋狀態列＋上線更新步驟卡）＋`tools/gui.test.mjs`＋根目錄`換素材工具.bat`（純 ASCII＋CRLF，`.gitattributes` 以 `*.bat -text` 鎖定）；覆蓋：`tools/replace.mjs`（拆出 encodeToSpec 核心）＋`tools/package.json`（test 加 gui）＋`docs/ASSETS.md`（GUI 優先＋上線更新段）。
 - 「🚀 上線更新」＝oss 用戶免指令部署：換完圖按鈕亮起，照步驟卡把 assets＋sw.js 拖回自己 repo 的 GitHub 上傳頁，Pages 自動重佈。repo 網址存瀏覽器 localStorage，不進檔案。

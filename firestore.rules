@@ -9,8 +9,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // 行程文件：需登入（App 使用匿名登入）
+    // 刪除一律拒絕：App 採封存制（archived 旗標），不存在正當的刪除路徑；
+    // 這條規則防止有人繞過 App 直接呼叫 deleteDoc 毀損資料。
     match /trips/{tripId} {
-      allow read, write: if request.auth != null;
+      allow read, create, update: if request.auth != null;
+      allow delete: if false;
     }
 
     // 其他所有路徑：一律拒絕
