@@ -53,3 +53,39 @@ assert.equal(
 );
 
 console.log('docs-render.test.mjs (Task 1): all assertions passed ✓');
+
+// 連結：站外 target=_blank/rel=noopener；站內（相對路徑）不加
+assert.equal(
+  renderMarkdown('[Google](https://google.com)').trim(),
+  '<p><a href="https://google.com" target="_blank" rel="noopener">Google</a></p>'
+);
+assert.equal(
+  renderMarkdown('[設定檔](./firebase-config.js)').trim(),
+  '<p><a href="./firebase-config.js">設定檔</a></p>'
+);
+
+// 圍欄程式碼區塊：多行、不套用行內格式（**/`` 原樣輸出）
+assert.equal(
+  renderMarkdown('```\nconst a = 1;\n**not bold**\n```').trim(),
+  '<pre><code>const a = 1;\n**not bold**</code></pre>'
+);
+
+// 引用：連續行合併成一個 blockquote，內部各自一個 <p>；純 "> " 空行不產生空段落
+assert.equal(
+  renderMarkdown('> 第一行\n>\n> 第二行').trim(),
+  '<blockquote><p>第一行</p><p>第二行</p></blockquote>'
+);
+
+// 無序清單：連續行合併成一個 <ul>
+assert.equal(
+  renderMarkdown('- 項目一\n- 項目二').trim(),
+  '<ul><li>項目一</li><li>項目二</li></ul>'
+);
+
+// 有序清單：連續行合併成一個 <ol>
+assert.equal(
+  renderMarkdown('1. 步驟一\n2. 步驟二').trim(),
+  '<ol><li>步驟一</li><li>步驟二</li></ol>'
+);
+
+console.log('docs-render.test.mjs (Task 2): all assertions passed ✓');
