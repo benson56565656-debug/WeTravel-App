@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>WeTravel 自架教學</title>
+</head>
+<body>
+<div id="content"><p>載入中…</p></div>
+<script>
+'use strict';
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderInline(s) {
+  let out = s.replace(/`([^`]+)`/g, (_, code) => '<code>' + code + '</code>');
+  out = out.replace(/\*\*([^*]+)\*\*/g, (_, b) => '<strong>' + b + '</strong>');
+  return out;
+}
+
+function renderMarkdown(md) {
+  const lines = escapeHtml(md).split('\n');
+  const out = [];
+  let i = 0;
+  let chapterNum = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    const heading = line.match(/^(#{1,4})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const text = renderInline(heading[2]);
+      if (level === 2) {
+        chapterNum++;
+        out.push('<h2 id="ch-' + chapterNum + '">' + text + '</h2>');
+      } else {
+        out.push('<h' + level + '>' + text + '</h' + level + '>');
+      }
+      i++;
+      continue;
+    }
+
+    if (/^---\s*$/.test(line)) { out.push('<hr>'); i++; continue; }
+
+    if (/^\s*$/.test(line)) { i++; continue; }
+
+    out.push('<p>' + renderInline(line) + '</p>');
+    i++;
+  }
+
+  return out.join('\n');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  // 完整頁面邏輯（fetch、TOC、複製鈕）在後續任務加入
+});
+</script>
+</body>
+</html>
