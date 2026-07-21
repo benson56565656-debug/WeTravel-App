@@ -12,6 +12,14 @@
 
 ---
 
+## 2026-07-21（oss 說明頁上線 ✅——docs/index.html 忠實網頁化 SETUP.md）
+- 新增 `docs/index.html`：單檔（inline CSS+JS）markdown 渲染殼，fetch 同資料夾 `SETUP.md` 瀏覽器端渲染，SETUP.md 本身不動＝唯一真相源。渲染器自寫極簡版（先 escape 再套格式，涵蓋標題/粗體/行內 code/圍欄程式碼/引用/清單/連結/分隔線語法子集），零第三方程式碼、零外部請求。
+- 頁面功能：側欄目錄（桌面 sticky／手機收合）＋ IntersectionObserver 捲動高亮目前章節、程式碼區塊複製鈕、fetch 失敗時顯示中文提示＋導向 GitHub 讀 SETUP.md 的連結（不留白頁）。視覺沿用 gui.html 品牌感（`--pink #e8467c`／`--bg #fff7f9`／system-ui 字體堆疊）。
+- 新增 `tests/docs-render.test.mjs`（vm 沙盒抽取 index.html 內 `<script>` 直接單元測試 `renderMarkdown` 純函式，含 escape-first 安全性斷言）；新增 `docs/.nojekyll` 避免 GitHub Pages 預設 Jekyll 處理干擾靜態檔案。
+- README 開頭導流連結改指 GitHub Pages 網址（SETUP.md 原始檔連結保留當備援）。
+- 驗證：`node tests/docs-render.test.mjs` 全綠；無頭 Chromium 煙霧測試（本地 http server 起 `docs/`）——標題數/目錄項目數與 SETUP.md 動態核對一致、複製鈕點擊後剪貼簿內容正確、零 console error；fetch 失敗（攔截 SETUP.md 請求模擬斷網）正確顯示中文 fallback。
+- 待辦：GitHub Pages 尚未開啟（下個任務處理）。
+
 ## 2026-07-21（同步上游：前端依賴全面 self-host ✅ v48）
 - 供應鏈收編：`vendor/` 收 tailwind 3.4.16＋vue 3.5.13 esm prod＋sortablejs 1.15.6＋phosphor 2.1.1（bold/fill/duotone 三權重 CSS+字型），第三方 CDN（unpkg/jsdelivr/tailwindcss.com）歸零；Google Fonts＋firebase gstatic 留 CDN（信任邊界＝只信 Google 基礎設施）。自架者好處：不再依賴第三方 CDN 存活與誠實，斷網開發也行。
 - index.html/sw.js 整檔覆蓋（sw v48、ASSETS 全本地含 woff2 預快取）；app.js **二進位模式**手術替換 vue import（保 CRLF 行尾——文字模式讀寫會靜默 LF 化，踩過）。與上游 diff 降至 20 行＝純去敏化足跡。
